@@ -1,9 +1,12 @@
-from sqlalchemy import BLOB, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import BLOB, Column, Integer, String, DateTime, ForeignKey, Time, Boolean
 from sqlalchemy.orm import relationship
-from database import Base
+from app.database import Base
 from sqlalchemy import LargeBinary
+from sqlalchemy.ext.declarative import declarative_base
+Base = declarative_base()
 
-class trabajador(Base):
+
+class Trabajador(Base):
     __tablename__ = "trabajadores"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -19,7 +22,7 @@ class trabajador(Base):
     fechaIngresoGobFed = Column(DateTime, nullable=False)
     puesto = Column(String(100), nullable=False)
     id_horario = Column(Integer, ForeignKey("horarios.id"))
-    estado = Column(bool, nullable=False)
+    estado = Column(Boolean, nullable=False)
     id_centroTrabajo = Column(Integer, ForeignKey("centroTrabajo.id"))
     id_gradoEstudios = Column(Integer, ForeignKey("gradosEstudio.id"))
     titulo = Column(String(100), nullable=False)
@@ -28,15 +31,16 @@ class trabajador(Base):
     turno = Column(String(100), nullable=False)
     correo = Column(String(100), nullable=False)
     huellaDigital = Column(BLOB, nullable=False)
+    id_rol = Column(Integer, ForeignKey("rolesUsuarios.id"))
 
-class tipoTrabajador(Base):
+class TipoTrabajador(Base):
     __tablename__ = "tipoTrabajador"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
 
 
-class departamento(Base):
+class Departamento(Base):
     __tablename__ = "departamentos"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -44,24 +48,24 @@ class departamento(Base):
 
 
 
-class horario(Base):
+class Horario(Base):
     __tablename__ = "horarios"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
-    lunesEntrada = Column(Time), nullable=False
-    lunesSalida = Column(Time), nullable=False
-    martesEntrada = Column(Time), nullable=False
-    martesSalida = Column(Time), nullable=False
-    miercolesEntrada = Column(Time), nullable=False
-    miercolesSalida = Column(Time), nullable=False
-    juevesEntrada = Column(Time), nullable=False
-    juevesSalida = Column(Time), nullable=False
-    viernesEntrada = Column(Time), nullable=False
-    viernesSalida = Column(Time), nullable=False
+    lunesEntrada = Column(Time, nullable=False)
+    lunesSalida = Column(Time, nullable=False)
+    martesEntrada = Column(Time, nullable=False)
+    martesSalida = Column(Time, nullable=False)
+    miercolesEntrada = Column(Time, nullable=False)
+    miercolesSalida = Column(Time, nullable=False)
+    juevesEntrada = Column(Time, nullable=False)
+    juevesSalida = Column(Time, nullable=False)
+    viernesEntrada = Column(Time, nullable=False)
+    viernesSalida = Column(Time, nullable=False)
     
 
-class centroTrabajo(Base):
+class CentroTrabajo(Base):
     __tablename__ = "centroTrabajo"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -72,7 +76,7 @@ class centroTrabajo(Base):
     plantel = Column(String(100), nullable=False)
     logo = Column(LargeBinary, nullable=False)
 
-class asignacionHorario(Base):
+class AsignacionHorario(Base):
     __tablename__ = "asignacionHorarios"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -81,7 +85,7 @@ class asignacionHorario(Base):
     fehcaInicio = Column(DateTime, nullable=False)  
 
 
-class registroAsistencia(Base):
+class RegistroAsistencia(Base):
     __tablename__ = "registroAsistencia"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -89,13 +93,13 @@ class registroAsistencia(Base):
     fecha = Column(DateTime, nullable=False)
     estatus = Column(String(50), nullable=False)
 
-class gradoEstudio(Base):
+class GradoEstudio(Base):
     __tablename__ = "gradosEstudio"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
 
-class justificacion(Base):
+class Justificacion(Base):
     __tablename__ = "justificaciones"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -103,13 +107,13 @@ class justificacion(Base):
     fecha = Column(DateTime, nullable=False)
     id_descripcion = Column(Integer, ForeignKey("reglasJustificaciones.id"))
 
-class reglaJustificacion(Base):
+class ReglaJustificacion(Base):
     __tablename__ = "reglasJustificaciones"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
 
-class reglaRetardo(Base):
+class ReglaRetardo(Base):
     __tablename__ = "reglasRetardos"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -117,9 +121,15 @@ class reglaRetardo(Base):
     minutosMin = Column(Integer, nullable=False)
     minutosMax = Column(Integer, nullable=False)
 
-class diaFestivo(Base):
+class DiaFestivo(Base):
     __tablename__ = "diasFestivos"
 
     id = Column(Integer, primary_key=True, index=True)
     fecha = Column(DateTime, nullable=False)
+    descripcion = Column(String(100), nullable=False)
+
+class RolUsuario(Base):
+    __tablename__ = "rolesUsuarios"
+
+    id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
