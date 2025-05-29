@@ -15,14 +15,14 @@ class Trabajador(Base):
     nombre = Column(String(100), nullable=False)
     id_tipo = Column(Integer, ForeignKey("tipoTrabajador.id"))
     departamento = Column(Integer, ForeignKey("departamentos.id"))
-    rfc= Column(String(13), nullable=False)
+    rfc= Column(String(13), nullable=False, unique=True)
     curp = Column(String(18), nullable=False)
     fechaIngresoSep = Column(DateTime, nullable=False)
     fechaIngresoRama = Column(DateTime, nullable=False)
     fechaIngresoGobFed = Column(DateTime, nullable=False)
     puesto = Column(String(100), nullable=False)
     id_horario = Column(Integer, ForeignKey("horarios.id"))
-    estado = Column(Boolean, nullable=False)
+    estado = Column(Boolean, nullable=False, default=True)
     id_centroTrabajo = Column(Integer, ForeignKey("centroTrabajo.id"))
     id_gradoEstudios = Column(Integer, ForeignKey("gradosEstudio.id"))
     titulo = Column(String(100), nullable=False)
@@ -30,7 +30,7 @@ class Trabajador(Base):
     escuelaEgreso = Column(String(100), nullable=False)
     turno = Column(String(100), nullable=False)
     correo = Column(String(100), nullable=False)
-    huellaDigital = Column(BLOB, nullable=False)
+    huellaDigital = Column(BLOB, nullable=True)
     id_rol = Column(Integer, ForeignKey("rolesUsuarios.id"))
     hashed_password = Column(String(255), nullable=True)
 
@@ -83,7 +83,7 @@ class AsignacionHorario(Base):
     id = Column(Integer, primary_key=True, index=True)
     id_trabajador = Column(Integer, ForeignKey("trabajadores.id"))
     id_horario = Column(Integer, ForeignKey("horarios.id"))
-    fehcaInicio = Column(DateTime, nullable=False)  
+    fechaInicio = Column(DateTime, nullable=False)  
 
 
 class RegistroAsistencia(Base):

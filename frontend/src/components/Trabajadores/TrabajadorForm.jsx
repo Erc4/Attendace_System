@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { boolean } from 'yup';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -44,13 +43,11 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { es } from 'date-fns/locale';
 import { trabajadorService, catalogoService } from '../../services/api';
 import HuellaSimulator from './HuellaSimulator';
 
-// Validación para el formulario
+// Validación completa del formulario
 const validationSchema = Yup.object({
   // Datos personales
   nombre: Yup.string().required('El nombre es requerido'),
@@ -68,39 +65,42 @@ const validationSchema = Yup.object({
     .required('El correo es requerido'),
   
   // Datos laborales
-  id_tipo: Yup.number().required('El tipo de trabajador es requerido'),
-  departamento: Yup.number().required('El departamento es requerido'),
+  id_tipo: Yup.string().required('El tipo de trabajador es requerido'),
+  departamento: Yup.string().required('El departamento es requerido'),
   puesto: Yup.string().required('El puesto es requerido'),
-  id_horario: Yup.number().required('El horario es requerido'),
-  id_centroTrabajo: Yup.number().required('El centro de trabajo es requerido'),
+  id_horario: Yup.string().required('El horario es requerido'),
+  id_centroTrabajo: Yup.string().required('El centro de trabajo es requerido'),
   turno: Yup.string().required('El turno es requerido'),
-  fechaIngresoSep: Yup.date().required('La fecha de ingreso a SEP es requerida'),
-  fechaIngresoRama: Yup.date().required('La fecha de ingreso a la rama es requerida'),
-  fechaIngresoGobFed: Yup.date().required('La fecha de ingreso al gobierno federal es requerida'),
+  fechaIngresoSep: Yup.date().nullable().required('La fecha de ingreso a SEP es requerida'),
+  fechaIngresoRama: Yup.date().nullable().required('La fecha de ingreso a la rama es requerida'),
+  fechaIngresoGobFed: Yup.date().nullable().required('La fecha de ingreso al gobierno federal es requerida'),
   
   // Datos académicos
-  id_gradoEstudios: Yup.number().required('El grado de estudios es requerido'),
+  id_gradoEstudios: Yup.string().required('El grado de estudios es requerido'),
   titulo: Yup.string().required('El título es requerido'),
   cedula: Yup.string().required('La cédula es requerida'),
   escuelaEgreso: Yup.string().required('La escuela de egreso es requerida'),
   
-  // Acceso al sistema (opcional)
-  id_rol: Yup.number().required('El rol es requerido'),
+  // Acceso al sistema
+  id_rol: Yup.string().required('El rol es requerido'),
   tieneCuenta: Yup.boolean(),
   password: Yup.string().when('tieneCuenta', {
     is: true,
     then: () => Yup.string()
       .min(6, 'La contraseña debe tener al menos 6 caracteres')
       .required('La contraseña es requerida si el trabajador tiene acceso'),
-    otherwise: () => Yup.string()
+    otherwise: () => Yup.string().nullable()
   }),
   confirmPassword: Yup.string().when('tieneCuenta', {
     is: true,
     then: () => Yup.string()
       .oneOf([Yup.ref('password'), null], 'Las contraseñas deben coincidir')
       .required('Confirma la contraseña'),
-    otherwise: () => Yup.string()
+    otherwise: () => Yup.string().nullable()
   }),
+  
+  // Huella digital
+  huellaDigital: Yup.string().nullable()
 });
 
 const TrabajadorForm = () => {
@@ -168,6 +168,12 @@ const TrabajadorForm = () => {
         // Convertir fechas a objetos Date
         const formattedData = {
           ...data,
+          id_tipo: data.id_tipo ? data.id_tipo.toString() : '',
+          departamento: data.departamento ? data.departamento.toString() : '',
+          id_horario: data.id_horario ? data.id_horario.toString() : '',
+          id_centroTrabajo: data.id_centroTrabajo ? data.id_centroTrabajo.toString() : '',
+          id_gradoEstudios: data.id_gradoEstudios ? data.id_gradoEstudios.toString() : '',
+          id_rol: data.id_rol ? data.id_rol.toString() : '',
           fechaIngresoSep: new Date(data.fechaIngresoSep),
           fechaIngresoRama: new Date(data.fechaIngresoRama),
           fechaIngresoGobFed: new Date(data.fechaIngresoGobFed),
@@ -196,6 +202,7 @@ const TrabajadorForm = () => {
     const fetchCatalogos = async () => {
       try {
         setLoadingCatalogos(true);
+        console.log('Cargando catálogos...');
         
         const [
           tiposResponse,
@@ -213,12 +220,21 @@ const TrabajadorForm = () => {
           catalogoService.getRolesUsuario()
         ]);
         
-        setTiposTrabajador(tiposResponse);
-        setDepartamentos(deptosResponse);
-        setHorarios(horariosResponse);
-        setCentrosTrabajo(ctResponse);
-        setGradosEstudio(gradosResponse);
-        setRoles(rolesResponse);
+        console.log('Catálogos cargados:', {
+          tipos: tiposResponse,
+          departamentos: deptosResponse,
+          horarios: horariosResponse,
+          centros: ctResponse,
+          grados: gradosResponse,
+          roles: rolesResponse
+        });
+        
+        setTiposTrabajador(tiposResponse || []);
+        setDepartamentos(deptosResponse || []);
+        setHorarios(horariosResponse || []);
+        setCentrosTrabajo(ctResponse || []);
+        setGradosEstudio(gradosResponse || []);
+        setRoles(rolesResponse || []);
       } catch (err) {
         console.error('Error al cargar catálogos:', err);
         setError('No se pudieron cargar algunos catálogos necesarios.');
@@ -239,52 +255,146 @@ const TrabajadorForm = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
   
-  // Función para simular la captura de huella
-  const simulateCapture = (setFieldValue) => {
-    // Simulamos una captura exitosa con una cadena base64 ficticia
-    const huellaSimulada = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA";
-    setFieldValue('huellaDigital', huellaSimulada);
-    setHuellaCaptured(true);
+  // Test directo con debug detallado
+  const testDirectSubmit = async () => {
+    console.log('🧪 PRUEBA DIRECTA CON DEBUG DETALLADO');
+    
+    const testData = {
+      nombre: 'Test',
+      apellidoPaterno: 'Usuario',
+      apellidoMaterno: 'Prueba',
+      rfc: 'TEST123456789',
+      curp: 'TEST123456789012345',
+      correo: 'test@example.com',
+      id_tipo: 1,
+      departamento: 1,
+      puesto: 'Desarrollador',
+      id_horario: 1,
+      estado: true,
+      id_centroTrabajo: 1,
+      id_gradoEstudios: 1,
+      titulo: 'Ingeniero',
+      cedula: '123456',
+      escuelaEgreso: 'Universidad',
+      turno: 'MATUTINO',
+      fechaIngresoSep: '2024-01-01T08:00:00.000Z',
+      fechaIngresoRama: '2024-01-01T08:00:00.000Z',
+      fechaIngresoGobFed: '2024-01-01T08:00:00.000Z',
+      id_rol: 1,
+      huellaDigital: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFYSURBVDiNpZM9SwNBEIafgwQSCxsLwcJCG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG',
+      password: null
+    };
+    
+    console.log('📤 Enviando datos de test:', testData);
+    
+    try {
+      const response = await trabajadorService.create(testData);
+      console.log('✅ Test exitoso:', response);
+      alert('¡Test exitoso! Trabajador creado.');
+      navigate('/trabajadores');
+    } catch (error) {
+      console.error('❌ Test falló - Error completo:', error);
+      console.error('❌ Response status:', error.response?.status);
+      console.error('❌ Response data:', error.response?.data);
+      console.error('❌ Response headers:', error.response?.headers);
+      
+      // Mostrar el error detallado
+      let errorDetails = 'Error desconocido';
+      if (error.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errorDetails = error.response.data.detail.map(err => 
+            `Campo: ${err.loc.join('.')} - Error: ${err.msg} - Valor recibido: ${err.input}`
+          ).join('\n');
+        } else {
+          errorDetails = error.response.data.detail;
+        }
+      }
+      
+      console.error('❌ Detalles del error:', errorDetails);
+      alert(`Test falló:\n${errorDetails}`);
+    }
   };
   
   // Función principal para manejar el envío del formulario
-  const handleSubmit = async (values, { setSubmitting, setFieldError }) => {
-    // No enviar si no se ha capturado la huella
+  const handleFormSubmit = async (values, { setSubmitting, setFieldError }) => {
+    console.log('🚀 INICIANDO ENVÍO DEL FORMULARIO');
+    console.log('📝 Valores recibidos:', values);
+    
+    // Validar que se haya capturado la huella
     if (!values.huellaDigital && !huellaCaptured) {
+      console.log('❌ Error: Falta huella digital');
       setFieldError('huellaDigital', 'Es necesario capturar la huella digital');
-      setActiveStep(4); // Ir al paso de la huella
+      setActiveStep(4);
       setSubmitting(false);
       return;
     }
     
     try {
       setSaving(true);
+      setError(null);
+      console.log('🔄 Preparando datos...');
       
       // Preparar los datos a enviar
       const trabajadorData = {
-        ...values,
-        // Si no tiene cuenta, no enviar contraseña
-        ...(values.tieneCuenta ? {} : { password: null })
+        nombre: values.nombre,
+        apellidoPaterno: values.apellidoPaterno,
+        apellidoMaterno: values.apellidoMaterno,
+        rfc: values.rfc,
+        curp: values.curp,
+        correo: values.correo,
+        id_tipo: parseInt(values.id_tipo) || 1,
+        departamento: parseInt(values.departamento) || 1,
+        puesto: values.puesto,
+        id_horario: parseInt(values.id_horario) || 1,
+        estado: values.estado,
+        id_centroTrabajo: parseInt(values.id_centroTrabajo) || 1,
+        id_gradoEstudios: parseInt(values.id_gradoEstudios) || 1,
+        titulo: values.titulo,
+        cedula: values.cedula,
+        escuelaEgreso: values.escuelaEgreso,
+        turno: values.turno,
+        fechaIngresoSep: values.fechaIngresoSep ? new Date(values.fechaIngresoSep).toISOString() : new Date().toISOString(),
+        fechaIngresoRama: values.fechaIngresoRama ? new Date(values.fechaIngresoRama).toISOString() : new Date().toISOString(),
+        fechaIngresoGobFed: values.fechaIngresoGobFed ? new Date(values.fechaIngresoGobFed).toISOString() : new Date().toISOString(),
+        id_rol: parseInt(values.id_rol) || 1,
+        huellaDigital: values.huellaDigital || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA',
+        password: values.tieneCuenta ? values.password : null
       };
       
-      // Eliminar campos que no son parte del modelo
-      delete trabajadorData.tieneCuenta;
-      delete trabajadorData.confirmPassword;
+      console.log('📤 Datos preparados para envío:', trabajadorData);
       
+      let response;
       if (isEditMode) {
-        await trabajadorService.update(id, trabajadorData);
+        response = await trabajadorService.update(id, trabajadorData);
+        console.log('✅ Trabajador actualizado:', response);
       } else {
-        await trabajadorService.create(trabajadorData);
+        response = await trabajadorService.create(trabajadorData);
+        console.log('✅ Trabajador creado:', response);
       }
       
-      // Navegar de vuelta a la lista de trabajadores
+      alert(isEditMode ? '¡Trabajador actualizado exitosamente!' : '¡Trabajador creado exitosamente!');
       navigate('/trabajadores');
+      
     } catch (err) {
-      console.error('Error al guardar trabajador:', err);
-      setError('No se pudo guardar la información del trabajador. Inténtalo de nuevo más tarde.');
-      setSubmitting(false);
+      console.error('❌ ERROR AL GUARDAR:', err);
+      console.error('❌ Response data:', err.response?.data);
+      
+      let errorMessage = 'Error al guardar el trabajador.';
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          errorMessage = err.response.data.detail.map(e => 
+            `${e.msg} en ${e.loc.join('.')} (valor: ${e.input})`
+          ).join('\n');
+        } else {
+          errorMessage = err.response.data.detail;
+        }
+      }
+      
+      setError(errorMessage);
+      console.error('Error detallado:', errorMessage);
     } finally {
       setSaving(false);
+      setSubmitting(false);
     }
   };
   
@@ -292,12 +402,27 @@ const TrabajadorForm = () => {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
         <CircularProgress />
+        <Typography sx={{ ml: 2 }}>
+          {loadingCatalogos ? 'Cargando catálogos...' : 'Cargando datos...'}
+        </Typography>
       </Box>
     );
   }
   
   return (
     <Container>
+      {/* Botón de debug */}
+      <Box sx={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}>
+        <Button 
+          variant="contained" 
+          color="error" 
+          onClick={testDirectSubmit}
+          size="small"
+        >
+          🧪 Test Debug
+        </Button>
+      </Box>
+      
       <Box sx={{ mb: 4 }}>
         <Button
           variant="outlined"
@@ -321,7 +446,7 @@ const TrabajadorForm = () => {
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+          <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{error}</pre>
         </Alert>
       )}
       
@@ -337,7 +462,7 @@ const TrabajadorForm = () => {
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}
-          onSubmit={handleSubmit}
+          onSubmit={handleFormSubmit}
           enableReinitialize
         >
           {({
@@ -346,9 +471,9 @@ const TrabajadorForm = () => {
             touched,
             handleChange,
             handleBlur,
-            handleSubmit,
             isSubmitting,
-            setFieldValue
+            setFieldValue,
+            submitForm
           }) => (
             <Form>
               {/* Paso 1: Datos personales */}
@@ -467,7 +592,7 @@ const TrabajadorForm = () => {
                         label="Tipo de Trabajador"
                       >
                         {tiposTrabajador.map((tipo) => (
-                          <MenuItem key={tipo.id} value={tipo.id}>
+                          <MenuItem key={tipo.id} value={tipo.id.toString()}>
                             {tipo.descripcion}
                           </MenuItem>
                         ))}
@@ -489,7 +614,7 @@ const TrabajadorForm = () => {
                         label="Departamento"
                       >
                         {departamentos.map((depto) => (
-                          <MenuItem key={depto.id} value={depto.id}>
+                          <MenuItem key={depto.id} value={depto.id.toString()}>
                             {depto.descripcion}
                           </MenuItem>
                         ))}
@@ -525,7 +650,7 @@ const TrabajadorForm = () => {
                         label="Horario"
                       >
                         {horarios.map((horario) => (
-                          <MenuItem key={horario.id} value={horario.id}>
+                          <MenuItem key={horario.id} value={horario.id.toString()}>
                             {horario.descripcion}
                           </MenuItem>
                         ))}
@@ -567,7 +692,7 @@ const TrabajadorForm = () => {
                         label="Centro de Trabajo"
                       >
                         {centrosTrabajo.map((centro) => (
-                          <MenuItem key={centro.id} value={centro.id}>
+                          <MenuItem key={centro.id} value={centro.id.toString()}>
                             {centro.plantel} - {centro.ubicacion}
                           </MenuItem>
                         ))}
@@ -613,39 +738,37 @@ const TrabajadorForm = () => {
                   </Grid>
                   
                   <Grid item xs={12} md={4}>
-                    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
                       <DatePicker
                         label="Fecha de Ingreso a la Rama"
-                        value={values.fechaIngresoRama}
-                        onChange={(date) => setFieldValue('fechaIngresoRama', date)}
-                        slotProps={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            required
-                            error={touched.fechaIngresoRama && Boolean(errors.fechaIngresoRama)}
-                            helperText={touched.fechaIngresoRama && errors.fechaIngresoRama}
-                          />
-                        )}
+                        value={values.fechaIngresoRama ? dayjs(values.fechaIngresoRama) : null}
+                        onChange={(date) => setFieldValue('fechaIngresoRama', date ? date.toDate() : null)}
+                        slotProps={{
+                          textField: {
+                            fullWidth: true,
+                            required: true,
+                            error: touched.fechaIngresoRama && Boolean(errors.fechaIngresoRama),
+                            helperText: touched.fechaIngresoRama && errors.fechaIngresoRama
+                          }
+                        }}
                       />
                     </LocalizationProvider>
                   </Grid>
                   
                   <Grid item xs={12} md={4}>
-                    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={es}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
                       <DatePicker
                         label="Fecha de Ingreso Gobierno Federal"
-                        value={values.fechaIngresoGobFed}
-                        onChange={(date) => setFieldValue('fechaIngresoGobFed', date)}
-                        slotProps={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            required
-                            error={touched.fechaIngresoGobFed && Boolean(errors.fechaIngresoGobFed)}
-                            helperText={touched.fechaIngresoGobFed && errors.fechaIngresoGobFed}
-                          />
-                        )}
+                        value={values.fechaIngresoGobFed ? dayjs(values.fechaIngresoGobFed) : null}
+                        onChange={(date) => setFieldValue('fechaIngresoGobFed', date ? date.toDate() : null)}
+                        slotProps={{
+                          textField: {
+                            fullWidth: true,
+                            required: true,
+                            error: touched.fechaIngresoGobFed && Boolean(errors.fechaIngresoGobFed),
+                            helperText: touched.fechaIngresoGobFed && errors.fechaIngresoGobFed
+                          }
+                        }}
                       />
                     </LocalizationProvider>
                   </Grid>
@@ -672,7 +795,7 @@ const TrabajadorForm = () => {
                         label="Grado de Estudios"
                       >
                         {gradosEstudio.map((grado) => (
-                          <MenuItem key={grado.id} value={grado.id}>
+                          <MenuItem key={grado.id} value={grado.id.toString()}>
                             {grado.descripcion}
                           </MenuItem>
                         ))}
@@ -681,7 +804,7 @@ const TrabajadorForm = () => {
                         <FormHelperText>{errors.id_gradoEstudios}</FormHelperText>
                       )}
                     </FormControl>
-                    </Grid>
+                  </Grid>
                   
                   <Grid item xs={12} md={6}>
                     <TextField
@@ -756,30 +879,30 @@ const TrabajadorForm = () => {
                     </FormGroup>
                   </Grid>
                   
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth error={touched.id_rol && Boolean(errors.id_rol)}>
+                      <InputLabel required>Rol en el sistema</InputLabel>
+                      <Select
+                        name="id_rol"
+                        value={values.id_rol}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        label="Rol en el sistema"
+                      >
+                        {roles.map((rol) => (
+                          <MenuItem key={rol.id} value={rol.id.toString()}>
+                            {rol.descripcion}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {touched.id_rol && errors.id_rol && (
+                        <FormHelperText>{errors.id_rol}</FormHelperText>
+                      )}
+                    </FormControl>
+                  </Grid>
+                  
                   {values.tieneCuenta && (
                     <>
-                      <Grid item xs={12} md={6}>
-                        <FormControl fullWidth error={touched.id_rol && Boolean(errors.id_rol)}>
-                          <InputLabel required>Rol en el sistema</InputLabel>
-                          <Select
-                            name="id_rol"
-                            value={values.id_rol}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                            label="Rol en el sistema"
-                          >
-                            {roles.map((rol) => (
-                              <MenuItem key={rol.id} value={rol.id}>
-                                {rol.descripcion}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          {touched.id_rol && errors.id_rol && (
-                            <FormHelperText>{errors.id_rol}</FormHelperText>
-                          )}
-                        </FormControl>
-                      </Grid>
-                      
                       <Grid item xs={12} md={6}>
                         <TextField
                           fullWidth
@@ -835,6 +958,7 @@ const TrabajadorForm = () => {
                   <Grid item xs={12}>
                     <HuellaSimulator
                       onHuellaCapturada={(huellaData) => {
+                        console.log('Huella capturada:', huellaData);
                         if (huellaData) {
                           setFieldValue('huellaDigital', huellaData.data);
                           setHuellaCaptured(true);
@@ -870,11 +994,16 @@ const TrabajadorForm = () => {
                     <Button
                       variant="contained"
                       color="primary"
-                      startIcon={<Save />}
-                      type="submit"
+                      startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <Save />}
                       disabled={isSubmitting || saving}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        console.log('🔘 Botón presionado - Ejecutando submitForm');
+                        console.log('Estado actual:', { isSubmitting, saving, values });
+                        submitForm();
+                      }}
                     >
-                      {saving ? <CircularProgress size={24} /> : 'Guardar Trabajador'}
+                      {saving ? 'Guardando...' : 'Guardar Trabajador'}
                     </Button>
                   ) : (
                     <Button
