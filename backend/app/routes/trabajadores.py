@@ -7,15 +7,7 @@ from app.models.models import Trabajador, TipoTrabajador, Departamento, GradoEst
 from app.schemas.schemas import (
     TrabajadorCreate, 
     TrabajadorUpdate, 
-    TrabajadorOut,
-    TipoTrabajadorCreate,
-    TipoTrabajadorOut,
-    DepartamentoCreate,
-    DepartamentoOut,
-    GradoEstudioCreate,
-    GradoEstudioOut,
-    RolUsuarioCreate,
-    RolUsuarioOut
+    TrabajadorOut
 )
 from app.services.auth_service import get_current_trabajador, check_admin_permissions, get_password_hash
 
@@ -37,48 +29,42 @@ def create_trabajador(
         )
     
     # Crear el nuevo trabajador
-    huella_digital = base64.b64decode(trabajador.huellaDigital)
-    hashed_password = get_password_hash(trabajador.password)
+    trabajador_data = trabajador.dict()
     
-    # Crear un nuevo objeto Trabajador
-    db_trabajador = Trabajador(
-        apellidoPaterno=trabajador.apellidoPaterno,
-        apellidoMaterno=trabajador.apellidoMaterno,
-        nombre=trabajador.nombre,
-        id_tipo=trabajador.id_tipo,
-        departamento=trabajador.departamento,
-        rfc=trabajador.rfc,
-        curp=trabajador.curp,
-        fechaIngresoSep=trabajador.fechaIngresoSep,
-        fechaIngresoRama=trabajador.fechaIngresoRama,
-        fechaIngresoGobFed=trabajador.fechaIngresoGobFed,
-        puesto=trabajador.puesto,
-        id_horario=trabajador.id_horario,
-        estado=trabajador.estado,
-        id_centroTrabajo=trabajador.id_centroTrabajo,
-        id_gradoEstudios=trabajador.id_gradoEstudios,
-        titulo=trabajador.titulo,
-        cedula=trabajador.cedula,
-        escuelaEgreso=trabajador.escuelaEgreso,
-        turno=trabajador.turno,
-        correo=trabajador.correo,
-        huellaDigital=huella_digital,
-        id_rol=trabajador.id_rol,
-        hashed_password=hashed_password
-    )
+    # Manejar la huella digital
+    if trabajador_data.get('huellaDigital'):
+        try:
+            huella_digital = base64.b64decode(trabajador_data['huellaDigital'].split(',')[1] if ',' in trabajador_data['huellaDigital'] else trabajador_data['huellaDigital'])
+            trabajador_data['huellaDigital'] = huella_digital
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Error al procesar la huella digital"
+            )
     
+    # Manejar la contraseña si existe
+    if trabajador_data.get('password'):
+        trabajador_data['hashed_password'] = get_password_hash(trabajador_data['password'])
+        del trabajador_data['password']
+    else:
+        trabajador_data['hashed_password'] = None
+    
+    # Crear el trabajador
+    db_trabajador = Trabajador(**trabajador_data)
     db.add(db_trabajador)
     db.commit()
     db.refresh(db_trabajador)
+    
     return db_trabajador
 
 @router.get("/trabajadores", response_model=List[TrabajadorOut])
 def get_trabajadores(
-    skip: int = 0, 
-    limit: int = 100, 
-    nombre: Optional[str] = None,
-    departamento: Optional[int] = None,
-    rfc: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    nombre: Optional[str] = Query(None, description="Filtrar por nombre, apellido paterno o materno"),
+    departamento: Optional[int] = Query(None, description="Filtrar por ID de departamento"),
+    rfc: Optional[str] = Query(None, description="Filtrar por RFC"),
+    estado: Optional[bool] = Query(None, description="Filtrar por estado activo/inactivo"),
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
@@ -86,10 +72,11 @@ def get_trabajadores(
     
     # Aplicar filtros si se proporcionan
     if nombre:
+        search_term = f"%{nombre}%"
         query = query.filter(
-            (Trabajador.nombre.ilike(f"%{nombre}%")) | 
-            (Trabajador.apellidoPaterno.ilike(f"%{nombre}%")) | 
-            (Trabajador.apellidoMaterno.ilike(f"%{nombre}%"))
+            (Trabajador.nombre.ilike(search_term)) | 
+            (Trabajador.apellidoPaterno.ilike(search_term)) | 
+            (Trabajador.apellidoMaterno.ilike(search_term))
         )
     
     if departamento:
@@ -98,7 +85,16 @@ def get_trabajadores(
     if rfc:
         query = query.filter(Trabajador.rfc.ilike(f"%{rfc}%"))
     
-    return query.offset(skip).limit(limit).all()
+    if estado is not None:
+        query = query.filter(Trabajador.estado == estado)
+    
+    # Obtener el total para paginación
+    total = query.count()
+    
+    # Aplicar paginación
+    trabajadores = query.offset(skip).limit(limit).all()
+    
+    return trabajadores
 
 @router.get("/trabajadores/{trabajador_id}", response_model=TrabajadorOut)
 def get_trabajador_by_id(
@@ -133,7 +129,21 @@ def update_trabajador(
     
     # Manejar el campo de huella digital si está presente
     if "huellaDigital" in update_data and update_data["huellaDigital"]:
-        update_data["huellaDigital"] = base64.b64decode(update_data["huellaDigital"])
+        try:
+            huella_data = update_data["huellaDigital"]
+            if isinstance(huella_data, str) and huella_data.startswith('data:'):
+                huella_data = huella_data.split(',')[1]
+            update_data["huellaDigital"] = base64.b64decode(huella_data)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Error al procesar la huella digital"
+            )
+    
+    # Manejar contraseña si está presente
+    if "password" in update_data and update_data["password"]:
+        update_data["hashed_password"] = get_password_hash(update_data["password"])
+        del update_data["password"]
     
     for key, value in update_data.items():
         setattr(db_trabajador, key, value)
@@ -160,90 +170,64 @@ def delete_trabajador(
     db.commit()
     return None
 
-# Rutas para Tipos de Trabajador
-@router.post("/tipos-trabajador", response_model=TipoTrabajadorOut, status_code=status.HTTP_201_CREATED)
-def create_tipo_trabajador(
-    tipo: TipoTrabajadorCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_tipo = TipoTrabajador(**tipo.dict())
-    db.add(db_tipo)
-    db.commit()
-    db.refresh(db_tipo)
-    return db_tipo
-
-@router.get("/tipos-trabajador", response_model=List[TipoTrabajadorOut])
-def get_tipos_trabajador(
-    skip: int = 0, 
-    limit: int = 100, 
+# Endpoint para obtener trabajadores con información adicional (para listas)
+@router.get("/trabajadores-lista")
+def get_trabajadores_lista(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    search: Optional[str] = Query(None, description="Búsqueda general"),
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    return db.query(TipoTrabajador).offset(skip).limit(limit).all()
-
-# Rutas para Departamentos
-@router.post("/departamentos", response_model=DepartamentoOut, status_code=status.HTTP_201_CREATED)
-def create_departamento(
-    departamento: DepartamentoCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_departamento = Departamento(**departamento.dict())
-    db.add(db_departamento)
-    db.commit()
-    db.refresh(db_departamento)
-    return db_departamento
-
-@router.get("/departamentos", response_model=List[DepartamentoOut])
-def get_departamentos(
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    return db.query(Departamento).offset(skip).limit(limit).all()
-
-# Rutas para Grados de Estudio
-@router.post("/grados-estudio", response_model=GradoEstudioOut, status_code=status.HTTP_201_CREATED)
-def create_grado_estudio(
-    grado: GradoEstudioCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_grado = GradoEstudio(**grado.dict())
-    db.add(db_grado)
-    db.commit()
-    db.refresh(db_grado)
-    return db_grado
-
-@router.get("/grados-estudio", response_model=List[GradoEstudioOut])
-def get_grados_estudio(
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    return db.query(GradoEstudio).offset(skip).limit(limit).all()
-
-# Rutas para Roles de Usuario
-@router.post("/roles-usuario", response_model=RolUsuarioOut, status_code=status.HTTP_201_CREATED)
-def create_rol_usuario(
-    rol: RolUsuarioCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_rol = RolUsuario(**rol.dict())
-    db.add(db_rol)
-    db.commit()
-    db.refresh(db_rol)
-    return db_rol
-
-@router.get("/roles-usuario", response_model=List[RolUsuarioOut])
-def get_roles_usuario(
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    return db.query(RolUsuario).offset(skip).limit(limit).all()
+    """
+    Endpoint optimizado para obtener lista de trabajadores con información mínima necesaria
+    """
+    query = db.query(
+        Trabajador.id,
+        Trabajador.nombre,
+        Trabajador.apellidoPaterno,
+        Trabajador.apellidoMaterno,
+        Trabajador.rfc,
+        Trabajador.puesto,
+        Trabajador.estado,
+        Trabajador.correo,
+        Departamento.descripcion.label('departamento_nombre')
+    ).join(
+        Departamento, Trabajador.departamento == Departamento.id, isouter=True
+    )
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Trabajador.nombre.ilike(search_term)) |
+            (Trabajador.apellidoPaterno.ilike(search_term)) |
+            (Trabajador.apellidoMaterno.ilike(search_term)) |
+            (Trabajador.rfc.ilike(search_term)) |
+            (Trabajador.puesto.ilike(search_term))
+        )
+    
+    total = query.count()
+    trabajadores = query.offset(skip).limit(limit).all()
+    
+    # Formatear la respuesta
+    result = []
+    for trabajador in trabajadores:
+        result.append({
+            "id": trabajador.id,
+            "nombre": trabajador.nombre,
+            "apellidoPaterno": trabajador.apellidoPaterno,
+            "apellidoMaterno": trabajador.apellidoMaterno,
+            "nombreCompleto": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+            "rfc": trabajador.rfc,
+            "puesto": trabajador.puesto,
+            "estado": trabajador.estado,
+            "correo": trabajador.correo,
+            "departamento": trabajador.departamento_nombre or "Sin asignar"
+        })
+    
+    return {
+        "trabajadores": result,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }

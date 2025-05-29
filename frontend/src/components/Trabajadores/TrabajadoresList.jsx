@@ -61,14 +61,38 @@ const TrabajadoresList = () => {
     const fetchTrabajadores = async () => {
       try {
         setLoading(true);
-        const data = await trabajadorService.getAll({
-          nombre: searchTerm,
-          departamento: departamentoFilter || undefined
-        });
+        console.log('Intentando cargar trabajadores...'); // Debug
+        
+        const params = {};
+        if (searchTerm) params.nombre = searchTerm;
+        if (departamentoFilter) params.departamento = departamentoFilter;
+        
+        console.log('Parámetros de búsqueda:', params); // Debug
+        
+        const data = await trabajadorService.getAll(params);
+        console.log('Datos recibidos:', data); // Debug
+        
         setTrabajadores(data);
+        setError(null); // Limpiar errores previos
       } catch (err) {
-        console.error('Error al cargar trabajadores:', err);
-        setError('No se pudieron cargar los trabajadores. Inténtalo de nuevo más tarde.');
+        console.error('Error completo:', err); // Debug más detallado
+        console.error('Error response:', err.response); // Debug
+        console.error('Error message:', err.message); // Debug
+        
+        let errorMessage = 'No se pudieron cargar los trabajadores.';
+        
+        if (err.response) {
+          // El servidor respondió con un código de error
+          errorMessage = `Error del servidor: ${err.response.status} - ${err.response.data?.detail || err.response.statusText}`;
+        } else if (err.request) {
+          // La solicitud se realizó pero no hubo respuesta
+          errorMessage = 'No se pudo conectar con el servidor. Verifica que el backend esté funcionando.';
+        } else {
+          // Error en la configuración de la solicitud
+          errorMessage = `Error de configuración: ${err.message}`;
+        }
+        
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }

@@ -308,7 +308,40 @@ const catalogoService = {
     const response = await axiosInstance.get('/centros-trabajo');
     return response.data;
   },
+
+  getHorarios: async () => {
+    const response = await axiosInstance.get('/horarios');
+    return response.data;
+  },
+
+  //Crear nuevos catálogos
+  createDepartamento: async (departamento) => {
+    const response = await axiosInstance.post('/departamentos', departamento);
+    return response.data;
+  },
+  
+  createTipoTrabajador: async (tipo) => {
+    const response = await axiosInstance.post('/tipos-trabajador', tipo);
+    return response.data;
+  },
+  
+  createGradoEstudio: async (grado) => {
+    const response = await axiosInstance.post('/grados-estudio', grado);
+    return response.data;
+  },
+  
+  createRolUsuario: async (rol) => {
+    const response = await axiosInstance.post('/roles-usuario', rol);
+    return response.data;
+  },
+  
+  createCentroTrabajo: async (centro) => {
+    const response = await axiosInstance.post('/centros-trabajo', centro);
+    return response.data;
+  },
 };
+
+
 
 export {
   authService,

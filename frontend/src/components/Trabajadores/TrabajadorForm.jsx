@@ -48,6 +48,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { es } from 'date-fns/locale';
 import { trabajadorService, catalogoService } from '../../services/api';
+import HuellaSimulator from './HuellaSimulator';
 
 // Validación para el formulario
 const validationSchema = Yup.object({
@@ -594,18 +595,18 @@ const TrabajadorForm = () => {
                   </Grid>
                   
                   <Grid item xs={12} md={4}>
-                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale={es}>
+                    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
                       <DatePicker
                         label="Fecha de Ingreso SEP"
-                        value={values.fechaIngresoSep ? dayjs (values.fechaIngresoSep) : null}
+                        value={values.fechaIngresoSep ? dayjs(values.fechaIngresoSep) : null}
                         onChange={(date) => setFieldValue('fechaIngresoSep', date ? date.toDate() : null)}
                         slotProps={{
-                            textField: {
-                                fullWidth: true,
-                                required: true,
-                                error: touched.fechaIngresoSep && boolean(errors.fechaIngresoSep),
-                                helperText: touched.fechaIngresoSep && errors.fechaIngresoSep
-                            }
+                          textField: {
+                            fullWidth: true,
+                            required: true,
+                            error: touched.fechaIngresoSep && Boolean(errors.fechaIngresoSep),
+                            helperText: touched.fechaIngresoSep && errors.fechaIngresoSep
+                          }   
                         }}
                       />
                     </LocalizationProvider>
@@ -832,52 +833,18 @@ const TrabajadorForm = () => {
                   </Grid>
                   
                   <Grid item xs={12}>
-                    <Box
-                      sx={{
-                        border: '1px dashed',
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        p: 3,
-                        textAlign: 'center',
+                    <HuellaSimulator
+                      onHuellaCapturada={(huellaData) => {
+                        if (huellaData) {
+                          setFieldValue('huellaDigital', huellaData.data);
+                          setHuellaCaptured(true);
+                        } else {
+                          setFieldValue('huellaDigital', null);
+                          setHuellaCaptured(false);
+                        }
                       }}
-                    >
-                      {huellaCaptured || values.huellaDigital ? (
-                        <>
-                          <Box sx={{ color: 'success.main', mb: 2 }}>
-                            <Fingerprint sx={{ fontSize: 60 }} />
-                            <Typography variant="h6">¡Huella capturada correctamente!</Typography>
-                          </Box>
-                          <Button
-                            variant="outlined"
-                            startIcon={<AddAPhoto />}
-                            onClick={() => simulateCapture(setFieldValue)}
-                          >
-                            Volver a capturar
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Box sx={{ mb: 2 }}>
-                            <Fingerprint sx={{ fontSize: 60, color: 'action.active' }} />
-                            <Typography variant="body1">
-                              No se ha capturado ninguna huella digital
-                            </Typography>
-                          </Box>
-                          <Button
-                            variant="contained"
-                            startIcon={<Fingerprint />}
-                            onClick={() => simulateCapture(setFieldValue)}
-                          >
-                            Capturar huella digital
-                          </Button>
-                          {errors.huellaDigital && (
-                            <Typography color="error" variant="body2" sx={{ mt: 2 }}>
-                              {errors.huellaDigital}
-                            </Typography>
-                          )}
-                        </>
-                      )}
-                    </Box>
+                      huellaCaptured={huellaCaptured}
+                    />
                   </Grid>
                   
                   <Grid item xs={12}>

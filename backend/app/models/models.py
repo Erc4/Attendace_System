@@ -32,7 +32,7 @@ class Trabajador(Base):
     correo = Column(String(100), nullable=False)
     huellaDigital = Column(BLOB, nullable=False)
     id_rol = Column(Integer, ForeignKey("rolesUsuarios.id"))
-    hashed_password = Column(String(100), nullable=False)
+    hashed_password = Column(String(255), nullable=True)
 
 class TipoTrabajador(Base):
     __tablename__ = "tipoTrabajador"

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routes import trabajadores, asistencia, justificaciones, horarios, reportes, auth
+from app.routes import trabajadores, asistencia, justificaciones, horarios, reportes, auth, catalogos
 from app.database import engine
 from app.models import models
 
@@ -17,9 +17,14 @@ app = FastAPI(
 # Configuración de CORS para permitir solicitudes desde el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, cambiar a los dominios específicos
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",  # Por si cambias de puerto
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -30,6 +35,7 @@ app.include_router(asistencia.router, prefix="/api", tags=["Asistencias"])
 app.include_router(justificaciones.router, prefix="/api", tags=["Justificaciones"])
 app.include_router(horarios.router, prefix="/api", tags=["Horarios"])
 app.include_router(reportes.router, prefix="/api", tags=["Reportes"])
+app.include_router(catalogos.router, prefix="/api", tags=["Catálogos"])
 
 @app.get("/")
 async def root():
