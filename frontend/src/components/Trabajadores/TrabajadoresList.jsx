@@ -167,7 +167,7 @@ const TrabajadoresList = () => {
   );
   
   return (
-    <Container>
+    <Container maxWidth={false}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
           Trabajadores

@@ -1,9 +1,9 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel
+from datetime import datetime, date, time
 from typing import Optional, List
-from datetime import datetime, time
 import base64
 
-# Esquemas para Autenticación
+# Esquemas base para Token
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -11,45 +11,69 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     id: Optional[int] = None
 
-# Esquemas para Trabajadores
+class LoginRequest(BaseModel):
+    rfc: str
+    password: str
+
+# Esquemas para Trabajador
 class TrabajadorBase(BaseModel):
+    nombre: str
     apellidoPaterno: str
     apellidoMaterno: str
-    nombre: str
-    id_tipo: int
-    departamento: int
     rfc: str
     curp: str
-    fechaIngresoSep: datetime
-    fechaIngresoRama: datetime
-    fechaIngresoGobFed: datetime
+    correo: str  # Cambiado de EmailStr a str temporalmente
+    id_tipo: int
+    departamento: int
     puesto: str
     id_horario: int
-    estado: bool
+    estado: bool = True
     id_centroTrabajo: int
     id_gradoEstudios: int
     titulo: str
     cedula: str
     escuelaEgreso: str
     turno: str
-    correo: str
+    fechaIngresoSep: datetime
+    fechaIngresoRama: datetime
+    fechaIngresoGobFed: datetime
     id_rol: int
 
-class TrabajadorCreate(TrabajadorBase):
-    huellaDigital: str  # Base64 encoded string
-    password: str  # Solo para crear usuario
+class TrabajadorCreate(BaseModel):
+    # Copiar todos los campos de TrabajadorBase sin herencia para evitar problemas
+    nombre: str
+    apellidoPaterno: str
+    apellidoMaterno: str
+    rfc: str
+    curp: str
+    correo: str
+    id_tipo: int
+    departamento: int
+    puesto: str
+    id_horario: int
+    estado: bool = True
+    id_centroTrabajo: int
+    id_gradoEstudios: int
+    titulo: str
+    cedula: str
+    escuelaEgreso: str
+    turno: str
+    fechaIngresoSep: datetime
+    fechaIngresoRama: datetime
+    fechaIngresoGobFed: datetime
+    id_rol: int
+    huellaDigital: str  # Base64 encoded
+    password: Optional[str] = None  # COMPLETAMENTE OPCIONAL
 
 class TrabajadorUpdate(BaseModel):
+    nombre: Optional[str] = None
     apellidoPaterno: Optional[str] = None
     apellidoMaterno: Optional[str] = None
-    nombre: Optional[str] = None
-    id_tipo: Optional[int] = None
-    departamento: Optional[int] = None
     rfc: Optional[str] = None
     curp: Optional[str] = None
-    fechaIngresoSep: Optional[datetime] = None
-    fechaIngresoRama: Optional[datetime] = None
-    fechaIngresoGobFed: Optional[datetime] = None
+    correo: Optional[str] = None  # Cambiado de EmailStr a str
+    id_tipo: Optional[int] = None
+    departamento: Optional[int] = None
     puesto: Optional[str] = None
     id_horario: Optional[int] = None
     estado: Optional[bool] = None
@@ -59,15 +83,40 @@ class TrabajadorUpdate(BaseModel):
     cedula: Optional[str] = None
     escuelaEgreso: Optional[str] = None
     turno: Optional[str] = None
-    correo: Optional[str] = None
-    huellaDigital: Optional[str] = None
+    fechaIngresoSep: Optional[datetime] = None
+    fechaIngresoRama: Optional[datetime] = None
+    fechaIngresoGobFed: Optional[datetime] = None
     id_rol: Optional[int] = None
+    huellaDigital: Optional[str] = None
+    password: Optional[str] = None  # Completamente opcional, puede ser None
 
-class TrabajadorOut(TrabajadorBase):
+class TrabajadorOut(BaseModel):
     id: int
+    nombre: str
+    apellidoPaterno: str
+    apellidoMaterno: str
+    rfc: str
+    curp: str
+    correo: str
+    id_tipo: int
+    departamento: int
+    puesto: str
+    id_horario: int
+    estado: bool
+    id_centroTrabajo: int
+    id_gradoEstudios: int
+    titulo: str
+    cedula: str
+    escuelaEgreso: str
+    turno: str
+    fechaIngresoSep: datetime
+    fechaIngresoRama: datetime
+    fechaIngresoGobFed: datetime
+    id_rol: int
+    # NO incluir huellaDigital ni hashed_password en la respuesta por seguridad
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para TipoTrabajador
 class TipoTrabajadorBase(BaseModel):
@@ -76,14 +125,11 @@ class TipoTrabajadorBase(BaseModel):
 class TipoTrabajadorCreate(TipoTrabajadorBase):
     pass
 
-class TipoTrabajadorUpdate(TipoTrabajadorBase):
-    pass
-
 class TipoTrabajadorOut(TipoTrabajadorBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para Departamento
 class DepartamentoBase(BaseModel):
@@ -92,14 +138,11 @@ class DepartamentoBase(BaseModel):
 class DepartamentoCreate(DepartamentoBase):
     pass
 
-class DepartamentoUpdate(DepartamentoBase):
-    pass
-
 class DepartamentoOut(DepartamentoBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para Horario
 class HorarioBase(BaseModel):
@@ -135,9 +178,9 @@ class HorarioOut(HorarioBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-# Esquemas para Centro de Trabajo
+# Esquemas para CentroTrabajo
 class CentroTrabajoBase(BaseModel):
     claveCT: str
     entidadFederativa: str
@@ -146,7 +189,7 @@ class CentroTrabajoBase(BaseModel):
     plantel: str
 
 class CentroTrabajoCreate(CentroTrabajoBase):
-    logo: str  # Base64 encoded string
+    logo: str  # Base64 encoded
 
 class CentroTrabajoUpdate(BaseModel):
     claveCT: Optional[str] = None
@@ -158,29 +201,36 @@ class CentroTrabajoUpdate(BaseModel):
 
 class CentroTrabajoOut(CentroTrabajoBase):
     id: int
+    logo: str  # Se convertirá a base64 en la respuesta
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-# Esquemas para AsignacionHorario
-class AsignacionHorarioBase(BaseModel):
-    id_trabajador: int
-    id_horario: int
-    fehcaInicio: datetime
+# Esquemas para GradoEstudio
+class GradoEstudioBase(BaseModel):
+    descripcion: str
 
-class AsignacionHorarioCreate(AsignacionHorarioBase):
+class GradoEstudioCreate(GradoEstudioBase):
     pass
 
-class AsignacionHorarioUpdate(BaseModel):
-    id_trabajador: Optional[int] = None
-    id_horario: Optional[int] = None
-    fehcaInicio: Optional[datetime] = None
-
-class AsignacionHorarioOut(AsignacionHorarioBase):
+class GradoEstudioOut(GradoEstudioBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# Esquemas para RolUsuario
+class RolUsuarioBase(BaseModel):
+    descripcion: str
+
+class RolUsuarioCreate(RolUsuarioBase):
+    pass
+
+class RolUsuarioOut(RolUsuarioBase):
+    id: int
+    
+    class Config:
+        from_attributes = True
 
 # Esquemas para RegistroAsistencia
 class RegistroAsistenciaBase(BaseModel):
@@ -192,29 +242,14 @@ class RegistroAsistenciaCreate(RegistroAsistenciaBase):
     pass
 
 class RegistroAsistenciaUpdate(BaseModel):
+    fecha: Optional[datetime] = None
     estatus: Optional[str] = None
 
 class RegistroAsistenciaOut(RegistroAsistenciaBase):
     id: int
     
     class Config:
-        orm_mode = True
-
-# Esquemas para GradoEstudio
-class GradoEstudioBase(BaseModel):
-    descripcion: str
-
-class GradoEstudioCreate(GradoEstudioBase):
-    pass
-
-class GradoEstudioUpdate(GradoEstudioBase):
-    pass
-
-class GradoEstudioOut(GradoEstudioBase):
-    id: int
-    
-    class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para Justificacion
 class JustificacionBase(BaseModel):
@@ -226,13 +261,14 @@ class JustificacionCreate(JustificacionBase):
     pass
 
 class JustificacionUpdate(BaseModel):
+    fecha: Optional[datetime] = None
     id_descripcion: Optional[int] = None
 
 class JustificacionOut(JustificacionBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para ReglaJustificacion
 class ReglaJustificacionBase(BaseModel):
@@ -241,14 +277,14 @@ class ReglaJustificacionBase(BaseModel):
 class ReglaJustificacionCreate(ReglaJustificacionBase):
     pass
 
-class ReglaJustificacionUpdate(ReglaJustificacionBase):
-    pass
+class ReglaJustificacionUpdate(BaseModel):
+    descripcion: Optional[str] = None
 
 class ReglaJustificacionOut(ReglaJustificacionBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Esquemas para ReglaRetardo
 class ReglaRetardoBase(BaseModel):
@@ -268,7 +304,26 @@ class ReglaRetardoOut(ReglaRetardoBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+# Esquemas para AsignacionHorario
+class AsignacionHorarioBase(BaseModel):
+    id_trabajador: int
+    id_horario: int
+    fehcaInicio: datetime  # Mantener el typo hasta que se corrija en el modelo
+
+class AsignacionHorarioCreate(AsignacionHorarioBase):
+    pass
+
+class AsignacionHorarioUpdate(BaseModel):
+    id_horario: Optional[int] = None
+    fehcaInicio: Optional[datetime] = None
+
+class AsignacionHorarioOut(AsignacionHorarioBase):
+    id: int
+    
+    class Config:
+        from_attributes = True
 
 # Esquemas para DiaFestivo
 class DiaFestivoBase(BaseModel):
@@ -286,37 +341,11 @@ class DiaFestivoOut(DiaFestivoBase):
     id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-# Esquemas para RolUsuario
-class RolUsuarioBase(BaseModel):
-    descripcion: str
-
-class RolUsuarioCreate(RolUsuarioBase):
-    pass
-
-class RolUsuarioUpdate(RolUsuarioBase):
-    pass
-
-class RolUsuarioOut(RolUsuarioBase):
-    id: int
-    
-    class Config:
-        orm_mode = True
-
-# Esquemas para Login
-class LoginRequest(BaseModel):
-    rfc: str
-    password: str
-
-# Esquema para registro biométrico
-class BiometricoRequest(BaseModel):
-    huella: str  # Base64 encoded string
-
-# Esquema para reportes
+# Esquemas para reportes
 class ReporteFiltros(BaseModel):
-    fecha_inicio: Optional[datetime] = None
-    fecha_fin: Optional[datetime] = None
-    id_empleado: Optional[int] = None
-    id_departamento: Optional[int] = None
-    estatus: Optional[str] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    departamento_id: Optional[int] = None
+    trabajador_id: Optional[int] = None

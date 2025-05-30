@@ -303,7 +303,7 @@ const TrabajadorForm = () => {
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
           errorDetails = error.response.data.detail.map(err => 
-            `Campo: ${err.loc.join('.')} - Error: ${err.msg} - Valor recibido: ${err.input}`
+            `Campo: ${err.loc.join('.')} - Error: ${err.msg} - Tipo: ${err.type} - Valor: ${JSON.stringify(err.input)}`
           ).join('\n');
         } else {
           errorDetails = error.response.data.detail;
@@ -311,7 +311,7 @@ const TrabajadorForm = () => {
       }
       
       console.error('❌ Detalles del error:', errorDetails);
-      alert(`Test falló:\n${errorDetails}`);
+      alert(`Test falló:\n\n${errorDetails}`);
     }
   };
   
@@ -357,9 +357,14 @@ const TrabajadorForm = () => {
         fechaIngresoRama: values.fechaIngresoRama ? new Date(values.fechaIngresoRama).toISOString() : new Date().toISOString(),
         fechaIngresoGobFed: values.fechaIngresoGobFed ? new Date(values.fechaIngresoGobFed).toISOString() : new Date().toISOString(),
         id_rol: parseInt(values.id_rol) || 1,
-        huellaDigital: values.huellaDigital || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA',
-        password: values.tieneCuenta ? values.password : null
+        huellaDigital: values.huellaDigital || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA'
       };
+      
+      // SOLO agregar password si el trabajador tiene cuenta Y la contraseña no está vacía
+      if (values.tieneCuenta && values.password && values.password.trim()) {
+        trabajadorData.password = values.password;
+      }
+      // SI NO tiene cuenta o no hay contraseña, NO enviar el campo password para nada
       
       console.log('📤 Datos preparados para envío:', trabajadorData);
       
@@ -377,18 +382,24 @@ const TrabajadorForm = () => {
       
     } catch (err) {
       console.error('❌ ERROR AL GUARDAR:', err);
-      console.error('❌ Response data:', err.response?.data);
+      console.error('❌ Response status:', err.response?.status);
+      console.error('❌ Response data completa:', err.response?.data);
+      console.error('❌ Response headers:', err.response?.headers);
       
       let errorMessage = 'Error al guardar el trabajador.';
       if (err.response?.data?.detail) {
         if (Array.isArray(err.response.data.detail)) {
-          errorMessage = err.response.data.detail.map(e => 
-            `${e.msg} en ${e.loc.join('.')} (valor: ${e.input})`
+          errorMessage = 'Errores de validación:\n' + err.response.data.detail.map(e => 
+            `• Campo: ${e.loc.join('.')} - Error: ${e.msg} - Tipo esperado: ${e.type} - Valor recibido: ${JSON.stringify(e.input)}`
           ).join('\n');
         } else {
           errorMessage = err.response.data.detail;
         }
       }
+      
+      // Mostrar el error completo en consola Y en alert
+      console.error('💥 Error detallado completo:', errorMessage);
+      alert(`Error al guardar:\n\n${errorMessage}`);
       
       setError(errorMessage);
       console.error('Error detallado:', errorMessage);
