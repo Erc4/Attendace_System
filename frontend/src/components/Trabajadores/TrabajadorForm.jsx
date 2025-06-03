@@ -35,7 +35,8 @@ import {
   PersonAdd,
   Work,
   School,
-  VerifiedUser
+  VerifiedUser,
+  CheckCircle
 } from '@mui/icons-material';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
@@ -47,8 +48,8 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { trabajadorService, catalogoService } from '../../services/api';
 import HuellaSimulator from './HuellaSimulator';
 
-// Validación completa del formulario
-const validationSchema = Yup.object({
+// Validación completa del formulario con huella condicional
+const getValidationSchema = (isEditMode) => Yup.object({
   // Datos personales
   nombre: Yup.string().required('El nombre es requerido'),
   apellidoPaterno: Yup.string().required('El apellido paterno es requerido'),
@@ -86,21 +87,23 @@ const validationSchema = Yup.object({
   tieneCuenta: Yup.boolean(),
   password: Yup.string().when('tieneCuenta', {
     is: true,
-    then: () => Yup.string()
-      .min(6, 'La contraseña debe tener al menos 6 caracteres')
-      .required('La contraseña es requerida si el trabajador tiene acceso'),
+    then: () => isEditMode 
+      ? Yup.string().min(6, 'La contraseña debe tener al menos 6 caracteres').nullable()
+      : Yup.string().min(6, 'La contraseña debe tener al menos 6 caracteres').required('La contraseña es requerida si el trabajador tiene acceso'),
     otherwise: () => Yup.string().nullable()
   }),
-  confirmPassword: Yup.string().when('tieneCuenta', {
-    is: true,
+  confirmPassword: Yup.string().when(['tieneCuenta', 'password'], {
+    is: (tieneCuenta, password) => tieneCuenta && password,
     then: () => Yup.string()
       .oneOf([Yup.ref('password'), null], 'Las contraseñas deben coincidir')
       .required('Confirma la contraseña'),
     otherwise: () => Yup.string().nullable()
   }),
   
-  // Huella digital
-  huellaDigital: Yup.string().nullable()
+  // Huella digital - SOLO requerida en modo creación
+  huellaDigital: isEditMode 
+    ? Yup.string().nullable() 
+    : Yup.string().nullable().required('La huella digital es requerida para nuevos trabajadores')
 });
 
 const TrabajadorForm = () => {
@@ -152,6 +155,8 @@ const TrabajadorForm = () => {
   const [error, setError] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [huellaCaptured, setHuellaCaptured] = useState(false);
+  const [huellaExistente, setHuellaExistente] = useState(false); // Nueva bandera para huella existente
+  const [updateHuella, setUpdateHuella] = useState(false); // Bandera para actualizar huella
   
   // Definir los pasos del wizard
   const steps = ['Datos personales', 'Datos laborales', 'Datos académicos', 'Acceso al sistema', 'Huella digital'];
@@ -183,8 +188,36 @@ const TrabajadorForm = () => {
         };
         
         setInitialValues(formattedData);
-        if (data.huellaDigital) {
+        
+        // Verificar si ya tiene huella digital
+        // La huella puede venir como BLOB, array de bytes, o string base64
+        const tieneHuella = data.huellaDigital && 
+                           data.huellaDigital !== null && 
+                           data.huellaDigital !== '' &&
+                           (
+                             (typeof data.huellaDigital === 'string' && data.huellaDigital.length > 0) ||
+                             (Array.isArray(data.huellaDigital) && data.huellaDigital.length > 0) ||
+                             (data.huellaDigital instanceof ArrayBuffer && data.huellaDigital.byteLength > 0)
+                           );
+        
+        console.log('🔍 DEBUGGING HUELLA:');
+        console.log('- Datos recibidos:', data);
+        console.log('- huellaDigital raw:', data.huellaDigital);
+        console.log('- Tipo de huellaDigital:', typeof data.huellaDigital);
+        console.log('- Es array?:', Array.isArray(data.huellaDigital));
+        console.log('- Longitud:', data.huellaDigital?.length || 'N/A');
+        console.log('- Tiene huella calculado:', tieneHuella);
+        
+        if (tieneHuella) {
+          setHuellaExistente(true);
           setHuellaCaptured(true);
+          setUpdateHuella(false); // Por defecto no actualizar
+          console.log('✅ Trabajador tiene huella existente');
+        } else {
+          setHuellaExistente(false);
+          setHuellaCaptured(false);
+          setUpdateHuella(false);
+          console.log('❌ Trabajador NO tiene huella existente');
         }
       } catch (err) {
         console.error('Error al cargar datos del trabajador:', err);
@@ -255,78 +288,33 @@ const TrabajadorForm = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
   
-  // Test directo con debug detallado
-  const testDirectSubmit = async () => {
-    console.log('🧪 PRUEBA DIRECTA CON DEBUG DETALLADO');
-    
-    const testData = {
-      nombre: 'Test',
-      apellidoPaterno: 'Usuario',
-      apellidoMaterno: 'Prueba',
-      rfc: 'TEST123456789',
-      curp: 'TEST123456789012345',
-      correo: 'test@example.com',
-      id_tipo: 1,
-      departamento: 1,
-      puesto: 'Desarrollador',
-      id_horario: 1,
-      estado: true,
-      id_centroTrabajo: 1,
-      id_gradoEstudios: 1,
-      titulo: 'Ingeniero',
-      cedula: '123456',
-      escuelaEgreso: 'Universidad',
-      turno: 'MATUTINO',
-      fechaIngresoSep: '2024-01-01T08:00:00.000Z',
-      fechaIngresoRama: '2024-01-01T08:00:00.000Z',
-      fechaIngresoGobFed: '2024-01-01T08:00:00.000Z',
-      id_rol: 1,
-      huellaDigital: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFYSURBVDiNpZM9SwNBEIafgwQSCxsLwcJCG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG1sLG',
-      password: null
-    };
-    
-    console.log('📤 Enviando datos de test:', testData);
-    
-    try {
-      const response = await trabajadorService.create(testData);
-      console.log('✅ Test exitoso:', response);
-      alert('¡Test exitoso! Trabajador creado.');
-      navigate('/trabajadores');
-    } catch (error) {
-      console.error('❌ Test falló - Error completo:', error);
-      console.error('❌ Response status:', error.response?.status);
-      console.error('❌ Response data:', error.response?.data);
-      console.error('❌ Response headers:', error.response?.headers);
-      
-      // Mostrar el error detallado
-      let errorDetails = 'Error desconocido';
-      if (error.response?.data?.detail) {
-        if (Array.isArray(error.response.data.detail)) {
-          errorDetails = error.response.data.detail.map(err => 
-            `Campo: ${err.loc.join('.')} - Error: ${err.msg} - Tipo: ${err.type} - Valor: ${JSON.stringify(err.input)}`
-          ).join('\n');
-        } else {
-          errorDetails = error.response.data.detail;
-        }
-      }
-      
-      console.error('❌ Detalles del error:', errorDetails);
-      alert(`Test falló:\n\n${errorDetails}`);
-    }
-  };
-  
   // Función principal para manejar el envío del formulario
   const handleFormSubmit = async (values, { setSubmitting, setFieldError }) => {
     console.log('🚀 INICIANDO ENVÍO DEL FORMULARIO');
     console.log('📝 Valores recibidos:', values);
+    console.log('🔧 Modo edición:', isEditMode);
+    console.log('👆 Huella existente:', huellaExistente);
+    console.log('🔄 Actualizar huella:', updateHuella);
     
-    // Validar que se haya capturado la huella
-    if (!values.huellaDigital && !huellaCaptured) {
-      console.log('❌ Error: Falta huella digital');
-      setFieldError('huellaDigital', 'Es necesario capturar la huella digital');
-      setActiveStep(4);
-      setSubmitting(false);
-      return;
+    // Validar huella SOLO para nuevos trabajadores o si se va a actualizar
+    if (!isEditMode) {
+      // Modo creación: huella obligatoria
+      if (!values.huellaDigital && !huellaCaptured) {
+        console.log('❌ Error: Falta huella digital para nuevo trabajador');
+        setFieldError('huellaDigital', 'Es necesario capturar la huella digital para nuevos trabajadores');
+        setActiveStep(4);
+        setSubmitting(false);
+        return;
+      }
+    } else {
+      // Modo edición: huella opcional
+      if (updateHuella && !values.huellaDigital && !huellaCaptured) {
+        console.log('❌ Error: Se marcó actualizar huella pero no se capturó');
+        setFieldError('huellaDigital', 'Es necesario capturar la nueva huella digital');
+        setActiveStep(4);
+        setSubmitting(false);
+        return;
+      }
     }
     
     try {
@@ -357,14 +345,25 @@ const TrabajadorForm = () => {
         fechaIngresoRama: values.fechaIngresoRama ? new Date(values.fechaIngresoRama).toISOString() : new Date().toISOString(),
         fechaIngresoGobFed: values.fechaIngresoGobFed ? new Date(values.fechaIngresoGobFed).toISOString() : new Date().toISOString(),
         id_rol: parseInt(values.id_rol) || 1,
-        huellaDigital: values.huellaDigital || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA'
       };
+      
+      // Manejar huella digital
+      if (!isEditMode) {
+        // Modo creación: siempre incluir huella
+        trabajadorData.huellaDigital = values.huellaDigital || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA';
+      } else {
+        // Modo edición: solo incluir si se va a actualizar
+        if (updateHuella && values.huellaDigital) {
+          trabajadorData.huellaDigital = values.huellaDigital;
+          console.log('🔄 Actualizando huella digital...');
+        }
+        // Si no se actualiza la huella, no enviar el campo
+      }
       
       // SOLO agregar password si el trabajador tiene cuenta Y la contraseña no está vacía
       if (values.tieneCuenta && values.password && values.password.trim()) {
         trabajadorData.password = values.password;
       }
-      // SI NO tiene cuenta o no hay contraseña, NO enviar el campo password para nada
       
       console.log('📤 Datos preparados para envío:', trabajadorData);
       
@@ -384,7 +383,6 @@ const TrabajadorForm = () => {
       console.error('❌ ERROR AL GUARDAR:', err);
       console.error('❌ Response status:', err.response?.status);
       console.error('❌ Response data completa:', err.response?.data);
-      console.error('❌ Response headers:', err.response?.headers);
       
       let errorMessage = 'Error al guardar el trabajador.';
       if (err.response?.data?.detail) {
@@ -397,12 +395,10 @@ const TrabajadorForm = () => {
         }
       }
       
-      // Mostrar el error completo en consola Y en alert
       console.error('💥 Error detallado completo:', errorMessage);
       alert(`Error al guardar:\n\n${errorMessage}`);
       
       setError(errorMessage);
-      console.error('Error detallado:', errorMessage);
     } finally {
       setSaving(false);
       setSubmitting(false);
@@ -422,18 +418,6 @@ const TrabajadorForm = () => {
   
   return (
     <Container>
-      {/* Botón de debug */}
-      <Box sx={{ position: 'fixed', top: 10, right: 10, zIndex: 9999 }}>
-        <Button 
-          variant="contained" 
-          color="error" 
-          onClick={testDirectSubmit}
-          size="small"
-        >
-          🧪 Test Debug
-        </Button>
-      </Box>
-      
       <Box sx={{ mb: 4 }}>
         <Button
           variant="outlined"
@@ -472,7 +456,7 @@ const TrabajadorForm = () => {
         
         <Formik
           initialValues={initialValues}
-          validationSchema={validationSchema}
+          validationSchema={getValidationSchema(isEditMode)}
           onSubmit={handleFormSubmit}
           enableReinitialize
         >
@@ -917,15 +901,15 @@ const TrabajadorForm = () => {
                       <Grid item xs={12} md={6}>
                         <TextField
                           fullWidth
-                          label="Contraseña"
+                          label={isEditMode ? "Nueva Contraseña (opcional)" : "Contraseña"}
                           name="password"
                           type="password"
                           value={values.password}
                           onChange={handleChange}
                           onBlur={handleBlur}
                           error={touched.password && Boolean(errors.password)}
-                          helperText={touched.password && errors.password}
-                          required={values.tieneCuenta}
+                          helperText={touched.password && errors.password || (isEditMode ? "Deja en blanco para mantener la contraseña actual" : "")}
+                          required={!isEditMode && values.tieneCuenta}
                         />
                       </Grid>
                       
@@ -940,13 +924,16 @@ const TrabajadorForm = () => {
                           onBlur={handleBlur}
                           error={touched.confirmPassword && Boolean(errors.confirmPassword)}
                           helperText={touched.confirmPassword && errors.confirmPassword}
-                          required={values.tieneCuenta}
+                          required={!isEditMode && values.tieneCuenta || (isEditMode && values.password)}
                         />
                       </Grid>
                       
                       <Grid item xs={12}>
                         <Alert severity="info">
-                          Este trabajador podrá iniciar sesión usando su RFC y la contraseña asignada.
+                          {isEditMode 
+                            ? "Si no ingresas una nueva contraseña, se mantendrá la actual. El trabajador podrá iniciar sesión usando su RFC."
+                            : "Este trabajador podrá iniciar sesión usando su RFC y la contraseña asignada."
+                          }
                         </Alert>
                       </Grid>
                     </>
@@ -962,32 +949,141 @@ const TrabajadorForm = () => {
                       Huella digital
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      Captura la huella digital del trabajador para que pueda registrar su asistencia.
+                      {isEditMode 
+                        ? "Gestiona la huella digital del trabajador."
+                        : "Captura la huella digital del trabajador para que pueda registrar su asistencia."
+                      }
                     </Typography>
                   </Grid>
                   
+                  {/* DEBUG: Mostrar estados actuales */}
                   <Grid item xs={12}>
-                    <HuellaSimulator
-                      onHuellaCapturada={(huellaData) => {
-                        console.log('Huella capturada:', huellaData);
-                        if (huellaData) {
-                          setFieldValue('huellaDigital', huellaData.data);
-                          setHuellaCaptured(true);
-                        } else {
-                          setFieldValue('huellaDigital', null);
-                          setHuellaCaptured(false);
-                        }
-                      }}
-                      huellaCaptured={huellaCaptured}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <Alert severity="info">
-                      La huella digital es necesaria para que el trabajador pueda registrar su asistencia 
-                      mediante el lector biométrico.
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      <Typography variant="caption" component="div">
+                        <strong>DEBUG INFO:</strong><br/>
+                        • Modo edición: {isEditMode.toString()}<br/>
+                        • Huella existente: {huellaExistente.toString()}<br/>
+                        • Actualizar huella: {updateHuella.toString()}<br/>
+                        • Huella capturada: {huellaCaptured.toString()}<br/>
+                        • Valores.huellaDigital: {values.huellaDigital ? 'SÍ tiene' : 'NO tiene'}
+                      </Typography>
                     </Alert>
                   </Grid>
+                  
+                  {/* Opciones para todos los casos en modo edición */}
+                  {isEditMode && (
+                    <Grid item xs={12}>
+                      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Opciones de huella digital:
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                          {/* Opción: Mantener huella actual */}
+                          <Button
+                            variant={!updateHuella ? "contained" : "outlined"}
+                            color={!updateHuella ? "success" : "inherit"}
+                            onClick={() => {
+                              console.log('👍 Usuario eligió MANTENER huella actual');
+                              setUpdateHuella(false);
+                              setHuellaCaptured(true);
+                              setFieldValue('huellaDigital', null);
+                            }}
+                            startIcon={<CheckCircle />}
+                          >
+                            {huellaExistente ? 'Mantener huella actual' : 'Sin huella (mantener)'}
+                          </Button>
+                          
+                          {/* Opción: Actualizar/Capturar huella */}
+                          <Button
+                            variant={updateHuella ? "contained" : "outlined"}
+                            color={updateHuella ? "primary" : "inherit"}
+                            onClick={() => {
+                              console.log('🔄 Usuario eligió ACTUALIZAR/CAPTURAR huella');
+                              setUpdateHuella(true);
+                              setHuellaCaptured(false);
+                              setFieldValue('huellaDigital', null);
+                            }}
+                            startIcon={<Fingerprint />}
+                          >
+                            {huellaExistente ? 'Actualizar huella' : 'Capturar nueva huella'}
+                          </Button>
+                        </Box>
+                        
+                        {/* Estado actual */}
+                        <Box sx={{ mt: 2, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+                          <Typography variant="body2">
+                            <strong>Estado actual:</strong> {
+                              !updateHuella 
+                                ? huellaExistente 
+                                  ? '✅ Se mantendrá la huella digital existente'
+                                  : '⚠️ El trabajador no tendrá huella digital'
+                                : '🔄 Se capturará/actualizará la huella digital'
+                            }
+                          </Typography>
+                        </Box>
+                      </Paper>
+                    </Grid>
+                  )}
+                  
+                  {/* Mostrar capturador cuando corresponde */}
+                  {(!isEditMode || updateHuella) && (
+                    <Grid item xs={12}>
+                      <Paper variant="outlined" sx={{ p: 2 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          {isEditMode ? 'Capturar nueva huella digital:' : 'Capturar huella digital:'}
+                        </Typography>
+                        <HuellaSimulator
+                          onHuellaCapturada={(huellaData) => {
+                            console.log('🖐️ Huella capturada en simulador:', huellaData);
+                            if (huellaData) {
+                              setFieldValue('huellaDigital', huellaData.data);
+                              setHuellaCaptured(true);
+                              console.log('✅ Huella guardada en formulario');
+                            } else {
+                              setFieldValue('huellaDigital', null);
+                              setHuellaCaptured(false);
+                              console.log('❌ Huella eliminada del formulario');
+                            }
+                          }}
+                          huellaCaptured={false} // Siempre empezar desde cero cuando se muestra
+                        />
+                      </Paper>
+                    </Grid>
+                  )}
+                  
+                  {/* Información contextual */}
+                  <Grid item xs={12}>
+                    <Alert 
+                      severity={
+                        !isEditMode 
+                          ? "warning"
+                          : updateHuella 
+                            ? "info"
+                            : huellaExistente 
+                              ? "success"
+                              : "warning"
+                      }
+                    >
+                      {!isEditMode 
+                        ? "⚠️ La huella digital es obligatoria para nuevos trabajadores."
+                        : updateHuella 
+                          ? "ℹ️ Captura la nueva huella digital. Se reemplazará la actual."
+                          : huellaExistente 
+                            ? "✅ Se mantendrá la huella digital actual del trabajador."
+                            : "⚠️ El trabajador no podrá registrar asistencia sin huella digital."
+                      }
+                    </Alert>
+                  </Grid>
+                  
+                  {/* Error de validación si es necesario */}
+                  {touched.huellaDigital && errors.huellaDigital && (
+                    <Grid item xs={12}>
+                      <Alert severity="error">
+                        <strong>Error:</strong> {errors.huellaDigital}
+                      </Alert>
+                    </Grid>
+                  )}
                 </Grid>
               )}
               
@@ -1014,7 +1110,7 @@ const TrabajadorForm = () => {
                         submitForm();
                       }}
                     >
-                      {saving ? 'Guardando...' : 'Guardar Trabajador'}
+                      {saving ? 'Guardando...' : (isEditMode ? 'Actualizar Trabajador' : 'Crear Trabajador')}
                     </Button>
                   ) : (
                     <Button

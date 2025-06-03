@@ -25,22 +25,45 @@ const Layout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          width: { sm: `calc(100% - ${isAuthenticated && sidebarOpen ? drawerWidth : 0}px)` },
-          ml: { sm: isAuthenticated && sidebarOpen ? `${drawerWidth}px` : 0 },
+          width: { 
+            sm: isAuthenticated && sidebarOpen 
+              ? `calc(100% - ${drawerWidth}px)` 
+              : '100%' 
+          },
+          ml: { 
+            sm: isAuthenticated && sidebarOpen 
+              ? `${drawerWidth}px` 
+              : 0 
+          },
           transition: (theme) => theme.transitions.create(['margin', 'width'], {
             easing: theme.transitions.easing.easeOut,
             duration: theme.transitions.duration.enteringScreen,
           }),
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          p:0, // Elimina padding extra
+          m:0,
         }}
       >
-        <Toolbar /> {/* Este Toolbar es para mantener el espacio del Header fijo */}
-        <Box sx={{ p: 3 }}>
+        <Toolbar /> {/* Espacio para el Header fijo */}
+        
+        {/* Contenido principal sin padding extra */}
+        <Box sx={{ 
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          p:0,
+          m:0,
+          overflow: 'hidden', // Previene scroll horizontal
+        }}>
           {children}
         </Box>
+        
         <Footer />
       </Box>
     </Box>
   );
 };
 
-export default Layout;
+export default Layout;  

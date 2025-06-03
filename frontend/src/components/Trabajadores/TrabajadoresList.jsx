@@ -27,7 +27,8 @@ import {
   DialogActions,
   DialogContent,
   DialogContentText,
-  DialogTitle
+  DialogTitle,
+  Stack
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -35,7 +36,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
-  Fingerprint as FingerprintIcon
+  Fingerprint as FingerprintIcon,
+  FilterList as FilterIcon
 } from '@mui/icons-material';
 import { trabajadorService, catalogoService } from '../../services/api';
 
@@ -167,195 +169,286 @@ const TrabajadoresList = () => {
   );
   
   return (
-    <Container maxWidth={false}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
+    <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, py: 2 }}>
+      {/* Header Section - Más compacto */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 600 }}>
           Trabajadores
         </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
+        <Typography variant="body1" color="text.secondary">
           Administra la información de los trabajadores del sistema
         </Typography>
       </Box>
       
-      <Paper sx={{ p: 2, mb: 4 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={6} md={4}>
-            <TextField
-              fullWidth
-              label="Buscar por nombre o RFC"
-              variant="outlined"
-              value={searchTerm}
-              onChange={handleSearchChange}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-            />
+      {/* Filtros y Búsqueda - Layout optimizado */}
+      <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+        <Stack spacing={2}>
+          {/* Primera fila: Búsqueda y filtro */}
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} sm={6} md={5}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Buscar por nombre o RFC"
+                variant="outlined"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={4} md={3}>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Departamento"
+                value={departamentoFilter}
+                onChange={handleDepartamentoFilterChange}
+                SelectProps={{
+                  native: true,
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <FilterIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+              >
+                <option value="">Todos los departamentos</option>
+                {departamentos.map((departamento) => (
+                  <option key={departamento.id} value={departamento.id}>
+                    {departamento.descripcion}
+                  </option>
+                ))}
+              </TextField>
+            </Grid>
+            
+            <Grid item xs={12} sm={2} md={4} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                component={RouterLink}
+                to="/trabajadores/nuevo"
+                sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+              >
+                Nuevo Trabajador
+              </Button>
+            </Grid>
           </Grid>
           
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              select
-              fullWidth
-              label="Departamento"
-              value={departamentoFilter}
-              onChange={handleDepartamentoFilterChange}
-              SelectProps={{
-                native: true,
-              }}
-            >
-              <option value="">Todos</option>
-              {departamentos.map((departamento) => (
-                <option key={departamento.id} value={departamento.id}>
-                  {departamento.descripcion}
-                </option>
-              ))}
-            </TextField>
-          </Grid>
-          
-          <Grid item xs={12} sm={12} md={5} sx={{ textAlign: 'right' }}>
+          {/* Estadísticas rápidas */}
+          {!loading && trabajadores.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 2, pt: 1 }}>
+              <Chip 
+                label={`Total: ${trabajadores.length}`} 
+                color="default" 
+                size="small" 
+              />
+              <Chip 
+                label={`Activos: ${trabajadores.filter(t => t.estado).length}`} 
+                color="success" 
+                size="small" 
+              />
+              <Chip 
+                label={`Inactivos: ${trabajadores.filter(t => !t.estado).length}`} 
+                color="default" 
+                size="small" 
+              />
+            </Box>
+          )}
+        </Stack>
+      </Paper>
+      
+      {/* Contenido Principal */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+          <CircularProgress />
+          <Typography sx={{ ml: 2 }}>Cargando trabajadores...</Typography>
+        </Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      ) : trabajadores.length === 0 ? (
+        <Card sx={{ textAlign: 'center', py: 6 }}>
+          <CardContent>
+            <FingerprintIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No se encontraron trabajadores
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {searchTerm || departamentoFilter 
+                ? 'Intenta con otros criterios de búsqueda' 
+                : 'Aún no hay trabajadores registrados en el sistema'
+              }
+            </Typography>
             <Button
               variant="contained"
               color="primary"
               startIcon={<AddIcon />}
               component={RouterLink}
               to="/trabajadores/nuevo"
-              sx={{ mt: { xs: 2, md: 0 } }}
             >
-              Nuevo Trabajador
+              Agregar Primer Trabajador
             </Button>
-          </Grid>
-        </Grid>
-      </Paper>
-      
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Alert severity="error" sx={{ mt: 4 }}>
-          {error}
-        </Alert>
-      ) : trabajadores.length === 0 ? (
-        <Card sx={{ mt: 4, p: 3, textAlign: 'center' }}>
-          <Typography variant="h6" color="text.secondary">
-            No se encontraron trabajadores
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Intenta con otros criterios de búsqueda o añade nuevos trabajadores
-          </Typography>
+          </CardContent>
         </Card>
       ) : (
-        <TableContainer component={Paper}>
-          <Table sx={{ minWidth: 650 }} aria-label="tabla de trabajadores">
-            <TableHead>
-              <TableRow>
-                <TableCell>Nombre</TableCell>
-                <TableCell>RFC</TableCell>
-                <TableCell>Departamento</TableCell>
-                <TableCell>Puesto</TableCell>
-                <TableCell>Estado</TableCell>
-                <TableCell align="right">Acciones</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedTrabajadores.map((trabajador) => (
-                <TableRow key={trabajador.id}>
-                  <TableCell>
-                    {`${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}`}
-                  </TableCell>
-                  <TableCell>{trabajador.rfc}</TableCell>
-                  <TableCell>{trabajador.departamento}</TableCell>
-                  <TableCell>{trabajador.puesto}</TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={trabajador.estado ? 'Activo' : 'Inactivo'} 
-                      color={trabajador.estado ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      component={RouterLink}
-                      to={`/trabajadores/${trabajador.id}`}
-                      size="small"
-                      color="primary"
-                      sx={{ mr: 1 }}
-                    >
-                      <VisibilityIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      component={RouterLink}
-                      to={`/trabajadores/${trabajador.id}/editar`}
-                      size="small"
-                      color="primary"
-                      sx={{ mr: 1 }}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => handleDeleteClick(trabajador)}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
+        <Paper elevation={1}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600 }}>Nombre Completo</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>RFC</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Departamento</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Puesto</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Estado</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600 }}>Acciones</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {paginatedTrabajadores.map((trabajador, index) => (
+                  <TableRow 
+                    key={trabajador.id}
+                    sx={{ 
+                      '&:hover': { bgcolor: 'action.hover' },
+                      bgcolor: index % 2 === 0 ? 'transparent' : 'grey.25'
+                    }}
+                  >
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {`${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}`}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ID: {trabajador.id}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {trabajador.rfc}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {trabajador.departamento}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {trabajador.puesto}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={trabajador.estado ? 'Activo' : 'Inactivo'} 
+                        color={trabajador.estado ? 'success' : 'default'}
+                        size="small"
+                        variant={trabajador.estado ? 'filled' : 'outlined'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                        <IconButton
+                          component={RouterLink}
+                          to={`/trabajadores/${trabajador.id}`}
+                          size="small"
+                          color="primary"
+                          title="Ver detalles"
+                        >
+                          <VisibilityIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          component={RouterLink}
+                          to={`/trabajadores/${trabajador.id}/editar`}
+                          size="small"
+                          color="primary"
+                          title="Editar"
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteClick(trabajador)}
+                          title="Eliminar"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          {/* Paginación */}
           <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
+            rowsPerPageOptions={[5, 10, 25, 50]}
             component="div"
             count={trabajadores.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Filas por página"
+            labelRowsPerPage="Filas por página:"
             labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+            sx={{ borderTop: 1, borderColor: 'divider' }}
           />
-        </TableContainer>
+        </Paper>
       )}
       
       {/* Diálogo de confirmación para eliminar trabajador */}
       <Dialog
         open={deleteDialogOpen}
         onClose={handleDeleteCancel}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
+        maxWidth="sm"
+        fullWidth
       >
-        <DialogTitle id="alert-dialog-title">
-          {"¿Eliminar trabajador?"}
+        <DialogTitle sx={{ pb: 1 }}>
+          Confirmar eliminación
         </DialogTitle>
         <DialogContent>
-          <DialogContentText id="alert-dialog-description">
+          <DialogContentText>
             {trabajadorToDelete && (
               <>
-                Estás a punto de eliminar al trabajador: 
+                ¿Estás seguro de que deseas eliminar al trabajador{' '}
                 <strong>
-                  {` ${trabajadorToDelete.nombre} ${trabajadorToDelete.apellidoPaterno} ${trabajadorToDelete.apellidoMaterno}`}
-                </strong>.
-                <br />
-                Esta acción no puede deshacerse.
+                  {`${trabajadorToDelete.nombre} ${trabajadorToDelete.apellidoPaterno} ${trabajadorToDelete.apellidoMaterno}`}
+                </strong>?
+                <br /><br />
+                Esta acción marcará al trabajador como inactivo y no podrá deshacerse.
               </>
             )}
           </DialogContentText>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel} color="primary">
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleDeleteCancel} color="inherit">
             Cancelar
           </Button>
-          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            autoFocus
+          >
             Eliminar
           </Button>
         </DialogActions>
       </Dialog>
-    </Container>
+    </Box>
   );
 };
 
