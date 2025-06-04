@@ -1,28 +1,41 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime, date, time
-from typing import Optional, List
-import base64
+from typing import Optional
 
-# Esquemas base para Token
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+# Schemas base para las tablas relacionadas
+class TipoTrabajadorBase(BaseModel):
+    id: int
+    descripcion: str
 
-class TokenData(BaseModel):
-    id: Optional[int] = None
+class DepartamentoBase(BaseModel):
+    id: int
+    descripcion: str
 
-class LoginRequest(BaseModel):
-    rfc: str
-    password: str
+class HorarioBase(BaseModel):
+    id: int
+    descripcion: str
 
-# Esquemas para Trabajador
+class CentroTrabajoBase(BaseModel):
+    id: int
+    plantel: str
+    ubicacion: str
+
+class GradoEstudioBase(BaseModel):
+    id: int
+    descripcion: str
+
+class RolUsuarioBase(BaseModel):
+    id: int
+    descripcion: str
+
+# Schemas para Trabajador
 class TrabajadorBase(BaseModel):
     nombre: str
     apellidoPaterno: str
     apellidoMaterno: str
     rfc: str
     curp: str
-    correo: str  # Cambiado de EmailStr a str temporalmente
+    correo: EmailStr
     id_tipo: int
     departamento: int
     puesto: str
@@ -39,31 +52,9 @@ class TrabajadorBase(BaseModel):
     fechaIngresoGobFed: datetime
     id_rol: int
 
-class TrabajadorCreate(BaseModel):
-    # Copiar todos los campos de TrabajadorBase sin herencia para evitar problemas
-    nombre: str
-    apellidoPaterno: str
-    apellidoMaterno: str
-    rfc: str
-    curp: str
-    correo: str
-    id_tipo: int
-    departamento: int
-    puesto: str
-    id_horario: int
-    estado: bool = True
-    id_centroTrabajo: int
-    id_gradoEstudios: int
-    titulo: str
-    cedula: str
-    escuelaEgreso: str
-    turno: str
-    fechaIngresoSep: datetime
-    fechaIngresoRama: datetime
-    fechaIngresoGobFed: datetime
-    id_rol: int
-    huellaDigital: str  # Base64 encoded
-    password: Optional[str] = None  # COMPLETAMENTE OPCIONAL
+class TrabajadorCreate(TrabajadorBase):
+    huellaDigital: str
+    password: Optional[str] = None
 
 class TrabajadorUpdate(BaseModel):
     nombre: Optional[str] = None
@@ -71,7 +62,7 @@ class TrabajadorUpdate(BaseModel):
     apellidoMaterno: Optional[str] = None
     rfc: Optional[str] = None
     curp: Optional[str] = None
-    correo: Optional[str] = None  # Cambiado de EmailStr a str
+    correo: Optional[EmailStr] = None
     id_tipo: Optional[int] = None
     departamento: Optional[int] = None
     puesto: Optional[str] = None
@@ -88,7 +79,7 @@ class TrabajadorUpdate(BaseModel):
     fechaIngresoGobFed: Optional[datetime] = None
     id_rol: Optional[int] = None
     huellaDigital: Optional[str] = None
-    password: Optional[str] = None  # Completamente opcional, puede ser None
+    password: Optional[str] = None
 
 class TrabajadorOut(BaseModel):
     id: int
@@ -113,39 +104,34 @@ class TrabajadorOut(BaseModel):
     fechaIngresoRama: datetime
     fechaIngresoGobFed: datetime
     id_rol: int
-    # NO incluir huellaDigital ni hashed_password en la respuesta por seguridad
+    
+    # Incluir las relaciones con sus datos completos
+    tipo_trabajador: Optional[TipoTrabajadorBase] = None
+    departamento_rel: Optional[DepartamentoBase] = None
+    horario_rel: Optional[HorarioBase] = None
+    centro_trabajo_rel: Optional[CentroTrabajoBase] = None
+    grado_estudios_rel: Optional[GradoEstudioBase] = None
+    rol_rel: Optional[RolUsuarioBase] = None
     
     class Config:
         from_attributes = True
 
-# Esquemas para TipoTrabajador
-class TipoTrabajadorBase(BaseModel):
+# Schemas para las otras entidades
+class TipoTrabajadorCreate(BaseModel):
     descripcion: str
-
-class TipoTrabajadorCreate(TipoTrabajadorBase):
-    pass
 
 class TipoTrabajadorOut(TipoTrabajadorBase):
-    id: int
-    
     class Config:
         from_attributes = True
 
-# Esquemas para Departamento
-class DepartamentoBase(BaseModel):
+class DepartamentoCreate(BaseModel):
     descripcion: str
 
-class DepartamentoCreate(DepartamentoBase):
-    pass
-
 class DepartamentoOut(DepartamentoBase):
-    id: int
-    
     class Config:
         from_attributes = True
 
-# Esquemas para Horario
-class HorarioBase(BaseModel):
+class HorarioCreate(BaseModel):
     descripcion: str
     lunesEntrada: time
     lunesSalida: time
@@ -157,9 +143,6 @@ class HorarioBase(BaseModel):
     juevesSalida: time
     viernesEntrada: time
     viernesSalida: time
-
-class HorarioCreate(HorarioBase):
-    pass
 
 class HorarioUpdate(BaseModel):
     descripcion: Optional[str] = None
@@ -174,22 +157,44 @@ class HorarioUpdate(BaseModel):
     viernesEntrada: Optional[time] = None
     viernesSalida: Optional[time] = None
 
-class HorarioOut(HorarioBase):
+class HorarioOut(BaseModel):
     id: int
+    descripcion: str
+    lunesEntrada: time
+    lunesSalida: time
+    martesEntrada: time
+    martesSalida: time
+    miercolesEntrada: time
+    miercolesSalida: time
+    juevesEntrada: time
+    juevesSalida: time
+    viernesEntrada: time
+    viernesSalida: time
     
     class Config:
         from_attributes = True
 
-# Esquemas para CentroTrabajo
-class CentroTrabajoBase(BaseModel):
+class GradoEstudioCreate(BaseModel):
+    descripcion: str
+
+class GradoEstudioOut(GradoEstudioBase):
+    class Config:
+        from_attributes = True
+
+class RolUsuarioCreate(BaseModel):
+    descripcion: str
+
+class RolUsuarioOut(RolUsuarioBase):
+    class Config:
+        from_attributes = True
+
+class CentroTrabajoCreate(BaseModel):
     claveCT: str
     entidadFederativa: str
     ubicacion: str
     nivel: str
     plantel: str
-
-class CentroTrabajoCreate(CentroTrabajoBase):
-    logo: str  # Base64 encoded
+    logo: str
 
 class CentroTrabajoUpdate(BaseModel):
     claveCT: Optional[str] = None
@@ -199,151 +204,141 @@ class CentroTrabajoUpdate(BaseModel):
     plantel: Optional[str] = None
     logo: Optional[str] = None
 
-class CentroTrabajoOut(CentroTrabajoBase):
+class CentroTrabajoOut(BaseModel):
     id: int
-    logo: str  # Se convertirá a base64 en la respuesta
+    claveCT: str
+    entidadFederativa: str
+    ubicacion: str
+    nivel: str
+    plantel: str
     
     class Config:
         from_attributes = True
 
-# Esquemas para GradoEstudio
-class GradoEstudioBase(BaseModel):
-    descripcion: str
+# Schemas para Asignación de Horario
+class AsignacionHorarioCreate(BaseModel):
+    id_trabajador: int
+    id_horario: int
+    fehcaInicio: datetime
 
-class GradoEstudioCreate(GradoEstudioBase):
-    pass
+class AsignacionHorarioUpdate(BaseModel):
+    id_trabajador: Optional[int] = None
+    id_horario: Optional[int] = None
+    fehcaInicio: Optional[datetime] = None
 
-class GradoEstudioOut(GradoEstudioBase):
+class AsignacionHorarioOut(BaseModel):
     id: int
+    id_trabajador: int
+    id_horario: int
+    fehcaInicio: datetime
     
     class Config:
         from_attributes = True
 
-# Esquemas para RolUsuario
-class RolUsuarioBase(BaseModel):
-    descripcion: str
-
-class RolUsuarioCreate(RolUsuarioBase):
-    pass
-
-class RolUsuarioOut(RolUsuarioBase):
-    id: int
-    
-    class Config:
-        from_attributes = True
-
-# Esquemas para RegistroAsistencia
-class RegistroAsistenciaBase(BaseModel):
+# Schemas para Registro de Asistencia
+class RegistroAsistenciaCreate(BaseModel):
     id_empleado: int
     fecha: datetime
     estatus: str
 
-class RegistroAsistenciaCreate(RegistroAsistenciaBase):
-    pass
-
 class RegistroAsistenciaUpdate(BaseModel):
+    id_empleado: Optional[int] = None
     fecha: Optional[datetime] = None
     estatus: Optional[str] = None
 
-class RegistroAsistenciaOut(RegistroAsistenciaBase):
+class RegistroAsistenciaOut(BaseModel):
     id: int
+    id_empleado: int
+    fecha: datetime
+    estatus: str
     
     class Config:
         from_attributes = True
 
-# Esquemas para Justificacion
-class JustificacionBase(BaseModel):
+# Schemas para Justificaciones
+class JustificacionCreate(BaseModel):
     id_empleado: int
     fecha: datetime
     id_descripcion: int
 
-class JustificacionCreate(JustificacionBase):
-    pass
-
 class JustificacionUpdate(BaseModel):
+    id_empleado: Optional[int] = None
     fecha: Optional[datetime] = None
     id_descripcion: Optional[int] = None
 
-class JustificacionOut(JustificacionBase):
+class JustificacionOut(BaseModel):
     id: int
+    id_empleado: int
+    fecha: datetime
+    id_descripcion: int
     
     class Config:
         from_attributes = True
 
-# Esquemas para ReglaJustificacion
-class ReglaJustificacionBase(BaseModel):
+# Schemas para Reglas de Justificación
+class ReglaJustificacionCreate(BaseModel):
     descripcion: str
-
-class ReglaJustificacionCreate(ReglaJustificacionBase):
-    pass
 
 class ReglaJustificacionUpdate(BaseModel):
     descripcion: Optional[str] = None
 
-class ReglaJustificacionOut(ReglaJustificacionBase):
+class ReglaJustificacionOut(BaseModel):
     id: int
+    descripcion: str
     
     class Config:
         from_attributes = True
 
-# Esquemas para ReglaRetardo
-class ReglaRetardoBase(BaseModel):
+# Schemas para Reglas de Retardo
+class ReglaRetardoCreate(BaseModel):
     descripcion: str
     minutosMin: int
     minutosMax: int
-
-class ReglaRetardoCreate(ReglaRetardoBase):
-    pass
 
 class ReglaRetardoUpdate(BaseModel):
     descripcion: Optional[str] = None
     minutosMin: Optional[int] = None
     minutosMax: Optional[int] = None
 
-class ReglaRetardoOut(ReglaRetardoBase):
+class ReglaRetardoOut(BaseModel):
     id: int
+    descripcion: str
+    minutosMin: int
+    minutosMax: int
     
     class Config:
         from_attributes = True
 
-# Esquemas para AsignacionHorario
-class AsignacionHorarioBase(BaseModel):
-    id_trabajador: int
-    id_horario: int
-    fehcaInicio: datetime  # Mantener el typo hasta que se corrija en el modelo
-
-class AsignacionHorarioCreate(AsignacionHorarioBase):
-    pass
-
-class AsignacionHorarioUpdate(BaseModel):
-    id_horario: Optional[int] = None
-    fehcaInicio: Optional[datetime] = None
-
-class AsignacionHorarioOut(AsignacionHorarioBase):
-    id: int
-    
-    class Config:
-        from_attributes = True
-
-# Esquemas para DiaFestivo
-class DiaFestivoBase(BaseModel):
+# Schemas para Días Festivos
+class DiaFestivoCreate(BaseModel):
     fecha: datetime
     descripcion: str
-
-class DiaFestivoCreate(DiaFestivoBase):
-    pass
 
 class DiaFestivoUpdate(BaseModel):
     fecha: Optional[datetime] = None
     descripcion: Optional[str] = None
 
-class DiaFestivoOut(DiaFestivoBase):
+class DiaFestivoOut(BaseModel):
     id: int
+    fecha: datetime
+    descripcion: str
     
     class Config:
         from_attributes = True
 
-# Esquemas para reportes
+# Schemas para Autenticación
+class LoginRequest(BaseModel):
+    rfc: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    id: Optional[int] = None
+
+# Schemas para Reportes
 class ReporteFiltros(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None

@@ -15,14 +15,14 @@ class Trabajador(Base):
     nombre = Column(String(100), nullable=False)
     id_tipo = Column(Integer, ForeignKey("tipoTrabajador.id"))
     departamento = Column(Integer, ForeignKey("departamentos.id"))
-    rfc= Column(String(13), nullable=False, unique=True)
+    rfc= Column(String(13), nullable=False)
     curp = Column(String(18), nullable=False)
     fechaIngresoSep = Column(DateTime, nullable=False)
     fechaIngresoRama = Column(DateTime, nullable=False)
     fechaIngresoGobFed = Column(DateTime, nullable=False)
     puesto = Column(String(100), nullable=False)
     id_horario = Column(Integer, ForeignKey("horarios.id"))
-    estado = Column(Boolean, nullable=False, default=True)
+    estado = Column(Boolean, nullable=False)
     id_centroTrabajo = Column(Integer, ForeignKey("centroTrabajo.id"))
     id_gradoEstudios = Column(Integer, ForeignKey("gradosEstudio.id"))
     titulo = Column(String(100), nullable=False)
@@ -30,15 +30,26 @@ class Trabajador(Base):
     escuelaEgreso = Column(String(100), nullable=False)
     turno = Column(String(100), nullable=False)
     correo = Column(String(100), nullable=False)
-    huellaDigital = Column(BLOB, nullable=True)
+    huellaDigital = Column(BLOB, nullable=False)
     id_rol = Column(Integer, ForeignKey("rolesUsuarios.id"))
-    hashed_password = Column(String(255), nullable=True)
+    hashed_password = Column(String(255), nullable=True)  # Campo para la contraseña hasheada
+    
+    # Definir las relaciones
+    tipo_trabajador = relationship("TipoTrabajador", back_populates="trabajadores")
+    departamento_rel = relationship("Departamento", back_populates="trabajadores")
+    horario_rel = relationship("Horario", back_populates="trabajadores")
+    centro_trabajo_rel = relationship("CentroTrabajo", back_populates="trabajadores")
+    grado_estudios_rel = relationship("GradoEstudio", back_populates="trabajadores")
+    rol_rel = relationship("RolUsuario", back_populates="trabajadores")
 
 class TipoTrabajador(Base):
     __tablename__ = "tipoTrabajador"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
+    
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="tipo_trabajador")
 
 
 class Departamento(Base):
@@ -46,6 +57,9 @@ class Departamento(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
+    
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="departamento_rel")
 
 
 
@@ -65,6 +79,9 @@ class Horario(Base):
     viernesEntrada = Column(Time, nullable=False)
     viernesSalida = Column(Time, nullable=False)
     
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="horario_rel")
+    
 
 class CentroTrabajo(Base):
     __tablename__ = "centroTrabajo"
@@ -76,6 +93,9 @@ class CentroTrabajo(Base):
     nivel = Column(String(100),nullable=False)
     plantel = Column(String(100), nullable=False)
     logo = Column(LargeBinary, nullable=False)
+    
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="centro_trabajo_rel")
 
 class AsignacionHorario(Base):
     __tablename__ = "asignacionHorarios"
@@ -83,7 +103,7 @@ class AsignacionHorario(Base):
     id = Column(Integer, primary_key=True, index=True)
     id_trabajador = Column(Integer, ForeignKey("trabajadores.id"))
     id_horario = Column(Integer, ForeignKey("horarios.id"))
-    fechaInicio = Column(DateTime, nullable=False)  
+    fehcaInicio = Column(DateTime, nullable=False)  
 
 
 class RegistroAsistencia(Base):
@@ -99,6 +119,9 @@ class GradoEstudio(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
+    
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="grado_estudios_rel")
 
 class Justificacion(Base):
     __tablename__ = "justificaciones"
@@ -134,3 +157,6 @@ class RolUsuario(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
+    
+    # Relación inversa
+    trabajadores = relationship("Trabajador", back_populates="rol_rel")

@@ -30,7 +30,9 @@ import {
   Fingerprint as FingerprintIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
-  EventNote as EventNoteIcon
+  EventNote as EventNoteIcon,
+  CheckCircle,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -74,10 +76,12 @@ const TrabajadorDetail = () => {
     const fetchTrabajador = async () => {
       try {
         setLoading(true);
+        console.log('🔍 Cargando trabajador con ID:', id);
         const data = await trabajadorService.getById(id);
+        console.log('📊 Datos del trabajador recibidos:', data);
         setTrabajador(data);
       } catch (err) {
-        console.error('Error al cargar datos del trabajador:', err);
+        console.error('❌ Error al cargar datos del trabajador:', err);
         setError('No se pudieron cargar los datos del trabajador');
       } finally {
         setLoading(false);
@@ -105,7 +109,7 @@ const TrabajadorDetail = () => {
         
         setAsistencias(data.registros || []);
       } catch (err) {
-        console.error('Error al cargar asistencias:', err);
+        console.error('❌ Error al cargar asistencias:', err);
         // No establecemos error global, solo para asistencias
       } finally {
         setLoadingAsistencias(false);
@@ -135,6 +139,56 @@ const TrabajadorDetail = () => {
     if (estatus === 'FALTA') return 'error';
     if (estatus === 'JUSTIFICADO') return 'info';
     return 'default';
+  };
+  
+  // Función helper para obtener el valor de una relación de forma segura
+  const getRelationValue = (relation, field = 'descripcion', fallback = 'N/A') => {
+    if (!relation) return fallback;
+    if (typeof relation === 'object' && relation[field]) {
+      return relation[field];
+    }
+    return fallback;
+  };
+  
+  // Función helper para obtener nombre del departamento
+  const getDepartamentoName = () => {
+    console.log('🏢 Departamento data:', trabajador?.departamento_rel);
+    return getRelationValue(trabajador?.departamento_rel, 'descripcion', 'Sin departamento');
+  };
+  
+  // Función helper para obtener nombre del tipo de trabajador
+  const getTipoTrabajadorName = () => {
+    console.log('👤 Tipo trabajador data:', trabajador?.tipo_trabajador);
+    return getRelationValue(trabajador?.tipo_trabajador, 'descripcion', 'No especificado');
+  };
+  
+  // Función helper para obtener grado de estudios
+  const getGradoEstudiosName = () => {
+    console.log('🎓 Grado estudios data:', trabajador?.grado_estudios_rel);
+    return getRelationValue(trabajador?.grado_estudios_rel, 'descripcion', 'No especificado');
+  };
+  
+  // Función helper para obtener horario
+  const getHorarioName = () => {
+    console.log('⏰ Horario data:', trabajador?.horario_rel);
+    return getRelationValue(trabajador?.horario_rel, 'descripcion', 'Sin horario asignado');
+  };
+  
+  // Función helper para obtener centro de trabajo
+  const getCentroTrabajoName = () => {
+    console.log('🏛️ Centro trabajo data:', trabajador?.centro_trabajo_rel);
+    if (trabajador?.centro_trabajo_rel) {
+      const plantel = trabajador.centro_trabajo_rel.plantel || '';
+      const ubicacion = trabajador.centro_trabajo_rel.ubicacion || '';
+      return plantel && ubicacion ? `${plantel} - ${ubicacion}` : (plantel || ubicacion || 'No especificado');
+    }
+    return 'No especificado';
+  };
+  
+  // Función helper para obtener rol
+  const getRolName = () => {
+    console.log('🔐 Rol data:', trabajador?.rol_rel);
+    return getRelationValue(trabajador?.rol_rel, 'descripcion', 'Sin rol asignado');
   };
   
   if (loading) {
@@ -199,7 +253,7 @@ const TrabajadorDetail = () => {
               {`${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}`}
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              {trabajador.puesto} - {trabajador.departamento}
+              {trabajador.puesto} - {getDepartamentoName()}
             </Typography>
           </Grid>
           <Grid item>
@@ -248,6 +302,7 @@ const TrabajadorDetail = () => {
                             label={trabajador.estado ? 'Activo' : 'Inactivo'} 
                             color={trabajador.estado ? 'success' : 'default'}
                             size="small"
+                            icon={trabajador.estado ? <CheckCircle /> : <ErrorIcon />}
                           />
                         } 
                       />
@@ -293,13 +348,13 @@ const TrabajadorDetail = () => {
                     <ListItem>
                       <ListItemText 
                         primary="Tipo de Trabajador" 
-                        secondary={trabajador.tipo || 'N/A'} 
+                        secondary={getTipoTrabajadorName()}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText 
                         primary="Departamento" 
-                        secondary={trabajador.departamento || 'N/A'} 
+                        secondary={getDepartamentoName()}
                       />
                     </ListItem>
                     <ListItem>
@@ -357,13 +412,19 @@ const TrabajadorDetail = () => {
                     <ListItem>
                       <ListItemText 
                         primary="Horario" 
-                        secondary={trabajador.horario || 'N/A'} 
+                        secondary={getHorarioName()}
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemText 
                         primary="Centro de Trabajo" 
-                        secondary={trabajador.centroTrabajo || 'N/A'} 
+                        secondary={getCentroTrabajoName()}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText 
+                        primary="Rol en el Sistema" 
+                        secondary={getRolName()}
                       />
                     </ListItem>
                   </List>
@@ -385,7 +446,7 @@ const TrabajadorDetail = () => {
                     <ListItem>
                       <ListItemText 
                         primary="Grado de Estudios" 
-                        secondary={trabajador.gradoEstudios || 'N/A'} 
+                        secondary={getGradoEstudiosName()}
                       />
                     </ListItem>
                     <ListItem>

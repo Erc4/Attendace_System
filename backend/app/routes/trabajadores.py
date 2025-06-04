@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import base64
 import traceback
+import re
 from app.database import get_db
-from app.models.models import Trabajador, TipoTrabajador, Departamento, GradoEstudio, RolUsuario
+from app.models.models import (
+    Trabajador, TipoTrabajador, Departamento, GradoEstudio, 
+    RolUsuario, Horario, CentroTrabajo
+)
 from app.schemas.schemas import (
     TrabajadorCreate, 
     TrabajadorUpdate, 
@@ -13,6 +17,51 @@ from app.schemas.schemas import (
 from app.services.auth_service import get_current_trabajador, check_admin_permissions, get_password_hash
 
 router = APIRouter()
+
+def process_fingerprint_base64(fingerprint_data):
+    """
+    Procesa y valida la huella digital en formato base64
+    """
+    try:
+        print(f"🖐️ Procesando huella digital...")
+        print(f"📏 Longitud original: {len(fingerprint_data)}")
+        print(f"🔤 Primeros 50 chars: {fingerprint_data[:50]}...")
+        
+        # Limpiar la cadena base64
+        cleaned_data = fingerprint_data
+        
+        # Remover prefijo data:image si existe
+        if 'data:' in cleaned_data and ',' in cleaned_data:
+            cleaned_data = cleaned_data.split(',')[1]
+            print(f"✂️ Removido prefijo data:, nueva longitud: {len(cleaned_data)}")
+        
+        # Remover espacios en blanco y saltos de línea
+        cleaned_data = re.sub(r'\s+', '', cleaned_data)
+        print(f"🧹 Después de limpiar espacios: {len(cleaned_data)}")
+        
+        # Verificar que solo contiene caracteres base64 válidos
+        if not re.match(r'^[A-Za-z0-9+/]*={0,2}$', cleaned_data):
+            print(f"❌ Caracteres inválidos en base64")
+            raise ValueError("La cadena contiene caracteres no válidos para base64")
+        
+        # Agregar padding si es necesario
+        missing_padding = len(cleaned_data) % 4
+        if missing_padding:
+            padding_needed = 4 - missing_padding
+            cleaned_data += '=' * padding_needed
+            print(f"➕ Agregado padding: {padding_needed} caracteres '='")
+            print(f"📏 Longitud final: {len(cleaned_data)}")
+        
+        # Intentar decodificar
+        decoded_data = base64.b64decode(cleaned_data)
+        print(f"✅ Decodificación exitosa, tamaño: {len(decoded_data)} bytes")
+        
+        return decoded_data
+        
+    except Exception as e:
+        print(f"❌ Error al procesar huella: {e}")
+        print(f"🔍 Datos problemáticos: {fingerprint_data[:100]}...")
+        raise ValueError(f"Error al procesar la huella digital: {str(e)}")
 
 @router.post("/trabajadores", response_model=TrabajadorOut, status_code=status.HTTP_201_CREATED)
 def create_trabajador(
@@ -37,23 +86,20 @@ def create_trabajador(
         trabajador_data = trabajador.dict()
         print(f"Datos del trabajador después de dict(): {trabajador_data}")
         
-        # Manejar la huella digital
+        # Manejar la huella digital con procesamiento mejorado
         if trabajador_data.get('huellaDigital'):
             try:
-                huella_data = trabajador_data['huellaDigital']
-                print(f"Huella recibida (primeros 50 chars): {huella_data[:50]}...")
-                
-                # Remover el prefijo data:image/png;base64, si existe
-                if huella_data.startswith('data:'):
-                    huella_data = huella_data.split(',')[1]
-                    print("Prefijo data: removido")
-                
-                huella_digital = base64.b64decode(huella_data)
+                huella_digital = process_fingerprint_base64(trabajador_data['huellaDigital'])
                 trabajador_data['huellaDigital'] = huella_digital
-                print(f"Huella decodificada, tamaño: {len(huella_digital)} bytes")
                 
+            except ValueError as ve:
+                print(f"Error de validación en huella: {ve}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(ve)
+                )
             except Exception as e:
-                print(f"Error procesando huella: {e}")
+                print(f"Error inesperado procesando huella: {e}")
                 print(f"Traceback: {traceback.format_exc()}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -66,7 +112,7 @@ def create_trabajador(
                 detail="La huella digital es requerida"
             )
         
-        # Manejar la contraseña - AQUÍ ESTÁ LO IMPORTANTE
+        # Manejar la contraseña
         password_value = trabajador_data.get('password')
         if password_value is not None and password_value.strip():
             print("Procesando contraseña para usuario con acceso al sistema...")
@@ -79,7 +125,7 @@ def create_trabajador(
         if 'password' in trabajador_data:
             del trabajador_data['password']
         
-        print(f"Datos finales para crear trabajador: {trabajador_data}")
+        print(f"Datos finales para crear trabajador: {list(trabajador_data.keys())}")
         
         # Crear el trabajador
         print("Creando instancia de Trabajador...")
@@ -97,10 +143,25 @@ def create_trabajador(
         
         print(f"¡TRABAJADOR CREADO EXITOSAMENTE! ID: {db_trabajador.id}")
         
-        return db_trabajador
+        # Cargar el trabajador con todas las relaciones para la respuesta
+        try:
+            trabajador_completo = db.query(Trabajador).options(
+                joinedload(Trabajador.tipo_trabajador),
+                joinedload(Trabajador.departamento_rel),
+                joinedload(Trabajador.horario_rel),
+                joinedload(Trabajador.centro_trabajo_rel),
+                joinedload(Trabajador.grado_estudios_rel),
+                joinedload(Trabajador.rol_rel)
+            ).filter(Trabajador.id == db_trabajador.id).first()
+            
+            return trabajador_completo
+        except Exception as e:
+            print(f"⚠️ Error cargando relaciones, devolviendo trabajador básico: {e}")
+            return db_trabajador
         
     except HTTPException as he:
         print(f"HTTPException: {he.detail}")
+        db.rollback()
         raise he
     except Exception as e:
         print(f"ERROR INESPERADO: {e}")
@@ -125,7 +186,15 @@ def get_trabajadores(
     try:
         print(f"Obteniendo trabajadores con parámetros: skip={skip}, limit={limit}")
         
-        query = db.query(Trabajador)
+        # Query con JOIN a todas las tablas relacionadas
+        query = db.query(Trabajador).options(
+            joinedload(Trabajador.tipo_trabajador),
+            joinedload(Trabajador.departamento_rel),
+            joinedload(Trabajador.horario_rel),
+            joinedload(Trabajador.centro_trabajo_rel),
+            joinedload(Trabajador.grado_estudios_rel),
+            joinedload(Trabajador.rol_rel)
+        )
         
         # Aplicar filtros si se proporcionan
         if nombre:
@@ -169,12 +238,30 @@ def get_trabajador_by_id(
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    trabajador = db.query(Trabajador).filter(Trabajador.id == trabajador_id).first()
+    print(f"🔍 Buscando trabajador con ID: {trabajador_id}")
+    
+    # Query con todas las relaciones cargadas
+    trabajador = db.query(Trabajador).options(
+        joinedload(Trabajador.tipo_trabajador),
+        joinedload(Trabajador.departamento_rel),
+        joinedload(Trabajador.horario_rel),
+        joinedload(Trabajador.centro_trabajo_rel),
+        joinedload(Trabajador.grado_estudios_rel),
+        joinedload(Trabajador.rol_rel)
+    ).filter(Trabajador.id == trabajador_id).first()
+    
     if not trabajador:
+        print(f"❌ Trabajador con ID {trabajador_id} no encontrado")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Trabajador con ID {trabajador_id} no encontrado"
         )
+    
+    print(f"✅ Trabajador encontrado: {trabajador.nombre} {trabajador.apellidoPaterno}")
+    print(f"🏢 Departamento: {trabajador.departamento_rel.descripcion if trabajador.departamento_rel else 'N/A'}")
+    print(f"👤 Tipo: {trabajador.tipo_trabajador.descripcion if trabajador.tipo_trabajador else 'N/A'}")
+    print(f"🎓 Grado: {trabajador.grado_estudios_rel.descripcion if trabajador.grado_estudios_rel else 'N/A'}")
+    
     return trabajador
 
 @router.put("/trabajadores/{trabajador_id}", response_model=TrabajadorOut)
@@ -202,11 +289,15 @@ def update_trabajador(
         # Manejar el campo de huella digital si está presente
         if "huellaDigital" in update_data and update_data["huellaDigital"]:
             try:
-                huella_data = update_data["huellaDigital"]
-                if isinstance(huella_data, str) and huella_data.startswith('data:'):
-                    huella_data = huella_data.split(',')[1]
-                update_data["huellaDigital"] = base64.b64decode(huella_data)
+                huella_digital = process_fingerprint_base64(update_data["huellaDigital"])
+                update_data["huellaDigital"] = huella_digital
                 print("Huella digital actualizada correctamente")
+            except ValueError as ve:
+                print(f"Error de validación en huella: {ve}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(ve)
+                )
             except Exception as e:
                 print(f"Error procesando huella: {e}")
                 raise HTTPException(
@@ -237,10 +328,24 @@ def update_trabajador(
                 print(f"Campo {key} no existe en el modelo")
         
         db.commit()
-        db.refresh(db_trabajador)
         
-        print(f"¡TRABAJADOR ACTUALIZADO EXITOSAMENTE! ID: {db_trabajador.id}")
-        return db_trabajador
+        # Cargar el trabajador actualizado con todas las relaciones
+        try:
+            trabajador_actualizado = db.query(Trabajador).options(
+                joinedload(Trabajador.tipo_trabajador),
+                joinedload(Trabajador.departamento_rel),
+                joinedload(Trabajador.horario_rel),
+                joinedload(Trabajador.centro_trabajo_rel),
+                joinedload(Trabajador.grado_estudios_rel),
+                joinedload(Trabajador.rol_rel)
+            ).filter(Trabajador.id == trabajador_id).first()
+            
+            print(f"¡TRABAJADOR ACTUALIZADO EXITOSAMENTE! ID: {trabajador_actualizado.id}")
+            return trabajador_actualizado
+        except Exception as e:
+            print(f"⚠️ Error cargando relaciones, devolviendo trabajador básico: {e}")
+            db.refresh(db_trabajador)
+            return db_trabajador
         
     except HTTPException as he:
         print(f"HTTPException: {he.detail}")
