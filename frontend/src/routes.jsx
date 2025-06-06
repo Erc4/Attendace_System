@@ -16,6 +16,12 @@ import TrabajadoresList from './components/Trabajadores/TrabajadoresList';
 import TrabajadorForm from './components/Trabajadores/TrabajadorForm';
 import TrabajadorDetail from './components/Trabajadores/TrabajadorDetail';
 
+// Componentes de Horarios
+import HorariosList from './components/Horarios/HorariosList';
+import HorarioForm from './components/Horarios/HorarioForm';
+import HorarioDetail from './components/Horarios/HorarioDetail';
+import TrabajadoresSinHorario from './components/Horarios/TrabajadoresSinHorario.jsx';
+
 // Página no encontrada
 import NotFound from './pages/NotFound';
 
@@ -75,8 +81,7 @@ const AppRoutes = () => {
         } 
       />
       
-      {/* Otras rutas que implementaremos después */}
-      {/* Trabajadores */}
+      {/* Rutas de Trabajadores */}
       <Route 
         path="/trabajadores" 
         element={
@@ -121,13 +126,57 @@ const AppRoutes = () => {
         } 
       />
       
-      {/* Horarios */}
+      {/* RUTAS DE HORARIOS - COMPLETAMENTE IMPLEMENTADAS */}
       <Route 
         path="/horarios" 
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Gestión de Horarios (por implementar)</div>
+              <HorariosList />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/horarios/nuevo" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <HorarioForm />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/horarios/:id" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <HorarioDetail />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/horarios/:id/editar" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <HorarioForm />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/horarios/trabajadores-sin-horario" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <TrabajadoresSinHorario />
             </Layout>
           </ProtectedRoute>
         } 

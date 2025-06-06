@@ -1,69 +1,134 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, date, time
+from datetime import datetime, time
 from app.database import get_db
 from app.models.models import (
     Horario, 
     AsignacionHorario, 
     Trabajador,
-    DiaFestivo,
-    CentroTrabajo
+    Departamento
 )
 from app.schemas.schemas import (
     HorarioCreate,
     HorarioUpdate,
     HorarioOut,
     AsignacionHorarioCreate,
-    AsignacionHorarioUpdate,
     AsignacionHorarioOut,
-    DiaFestivoCreate,
-    DiaFestivoUpdate,
-    DiaFestivoOut,
-    CentroTrabajoCreate,
-    CentroTrabajoUpdate,
-    CentroTrabajoOut
+    HorarioDetalladoOut
 )
 from app.services.auth_service import get_current_trabajador, check_admin_permissions
-import base64
 
 router = APIRouter()
 
-# Rutas para Horarios
+# ====== RUTAS PARA HORARIOS ======
+
 @router.post("/horarios", response_model=HorarioOut, status_code=status.HTTP_201_CREATED)
 def create_horario(
     horario: HorarioCreate, 
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
-    db_horario = Horario(**horario.dict())
-    db.add(db_horario)
-    db.commit()
-    db.refresh(db_horario)
-    return db_horario
+    """Crear un nuevo horario"""
+    try:
+        # Verificar si ya existe un horario con la misma descripción
+        existing_horario = db.query(Horario).filter(
+            Horario.descripcion == horario.descripcion
+        ).first()
+        
+        if existing_horario:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe un horario con la descripción: {horario.descripcion}"
+            )
+        
+        # Crear el nuevo horario
+        db_horario = Horario(**horario.dict())
+        db.add(db_horario)
+        db.commit()
+        db.refresh(db_horario)
+        
+        return db_horario
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear horario: {str(e)}"
+        )
 
 @router.get("/horarios", response_model=List[HorarioOut])
 def get_horarios(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    descripcion: Optional[str] = Query(None, description="Filtrar por descripción"),
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    return db.query(Horario).offset(skip).limit(limit).all()
+    """Obtener lista de horarios con filtros opcionales"""
+    try:
+        query = db.query(Horario)
+        
+        # Aplicar filtros si se proporcionan
+        if descripcion:
+            query = query.filter(Horario.descripcion.ilike(f"%{descripcion}%"))
+        
+        # Aplicar paginación
+        horarios = query.offset(skip).limit(limit).all()
+        
+        return horarios
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener horarios: {str(e)}"
+        )
 
-@router.get("/horarios/{horario_id}", response_model=HorarioOut)
+@router.get("/horarios/{horario_id}", response_model=HorarioDetalladoOut)
 def get_horario_by_id(
     horario_id: int, 
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
+    """Obtener un horario específico con información detallada"""
     horario = db.query(Horario).filter(Horario.id == horario_id).first()
     if not horario:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Horario con ID {horario_id} no encontrado"
         )
-    return horario
+    
+    # Obtener trabajadores asignados a este horario
+    trabajadores_asignados = db.query(Trabajador).filter(
+        Trabajador.id_horario == horario_id,
+        Trabajador.estado == True
+    ).all()
+    
+    # Obtener asignaciones históricas
+    asignaciones = db.query(AsignacionHorario, Trabajador).join(
+        Trabajador, AsignacionHorario.id_trabajador == Trabajador.id
+    ).filter(AsignacionHorario.id_horario == horario_id).all()
+    
+    return {
+        "horario": horario,
+        "trabajadores_asignados": trabajadores_asignados,
+        "total_trabajadores": len(trabajadores_asignados),
+        "asignaciones_historicas": [
+            {
+                "id": asignacion.id,
+                "trabajador": {
+                    "id": trabajador.id,
+                    "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+                    "rfc": trabajador.rfc,
+                    "puesto": trabajador.puesto
+                },
+                "fecha_inicio": asignacion.fehcaInicio
+            }
+            for asignacion, trabajador in asignaciones
+        ]
+    }
 
 @router.put("/horarios/{horario_id}", response_model=HorarioOut)
 def update_horario(
@@ -72,22 +137,47 @@ def update_horario(
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
-    db_horario = db.query(Horario).filter(Horario.id == horario_id).first()
-    if not db_horario:
+    """Actualizar un horario existente"""
+    try:
+        db_horario = db.query(Horario).filter(Horario.id == horario_id).first()
+        if not db_horario:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Horario con ID {horario_id} no encontrado"
+            )
+        
+        # Verificar si la nueva descripción ya existe en otro horario
+        update_data = horario_update.dict(exclude_unset=True)
+        if "descripcion" in update_data:
+            existing_horario = db.query(Horario).filter(
+                Horario.descripcion == update_data["descripcion"],
+                Horario.id != horario_id
+            ).first()
+            
+            if existing_horario:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Ya existe otro horario con la descripción: {update_data['descripcion']}"
+                )
+        
+        # Actualizar campos
+        for key, value in update_data.items():
+            setattr(db_horario, key, value)
+        
+        db.commit()
+        db.refresh(db_horario)
+        
+        return db_horario
+        
+    except HTTPException as he:
+        db.rollback()
+        raise he
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Horario con ID {horario_id} no encontrado"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar horario: {str(e)}"
         )
-    
-    # Actualizar campos si están presentes en la solicitud
-    update_data = horario_update.dict(exclude_unset=True)
-    
-    for key, value in update_data.items():
-        setattr(db_horario, key, value)
-    
-    db.commit()
-    db.refresh(db_horario)
-    return db_horario
 
 @router.delete("/horarios/{horario_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_horario(
@@ -95,356 +185,277 @@ def delete_horario(
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
-    db_horario = db.query(Horario).filter(Horario.id == horario_id).first()
-    if not db_horario:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Horario con ID {horario_id} no encontrado"
-        )
-    
-    # Verificar si hay trabajadores que usan este horario
-    trabajadores = db.query(Trabajador).filter(Trabajador.id_horario == horario_id).first()
-    if trabajadores:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se puede eliminar el horario porque está asignado a uno o más trabajadores"
-        )
-    
-    # Verificar si hay asignaciones de horario
-    asignaciones = db.query(AsignacionHorario).filter(AsignacionHorario.id_horario == horario_id).first()
-    if asignaciones:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se puede eliminar el horario porque tiene asignaciones históricas"
-        )
-    
-    db.delete(db_horario)
-    db.commit()
-    return None
-
-# Rutas para Asignación de Horarios
-@router.post("/asignacion-horarios", response_model=AsignacionHorarioOut, status_code=status.HTTP_201_CREATED)
-def create_asignacion_horario(
-    asignacion: AsignacionHorarioCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    # Verificar que exista el trabajador
-    trabajador = db.query(Trabajador).filter(Trabajador.id == asignacion.id_trabajador).first()
-    if not trabajador:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Trabajador con ID {asignacion.id_trabajador} no existe"
-        )
-    
-    # Verificar que exista el horario
-    horario = db.query(Horario).filter(Horario.id == asignacion.id_horario).first()
-    if not horario:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Horario con ID {asignacion.id_horario} no existe"
-        )
-    
-    # Crear la asignación
-    db_asignacion = AsignacionHorario(**asignacion.dict())
-    db.add(db_asignacion)
-    
-    # Actualizar el horario del trabajador
-    trabajador.id_horario = asignacion.id_horario
-    
-    db.commit()
-    db.refresh(db_asignacion)
-    return db_asignacion
-
-@router.get("/asignacion-horarios", response_model=List[AsignacionHorarioOut])
-def get_asignacion_horarios(
-    skip: int = 0, 
-    limit: int = 100,
-    id_trabajador: Optional[int] = None,
-    id_horario: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    query = db.query(AsignacionHorario)
-    
-    # Aplicar filtros si se proporcionan
-    if id_trabajador:
-        query = query.filter(AsignacionHorario.id_trabajador == id_trabajador)
-    
-    if id_horario:
-        query = query.filter(AsignacionHorario.id_horario == id_horario)
-    
-    return query.offset(skip).limit(limit).all()
-
-@router.get("/asignacion-horarios/{asignacion_id}", response_model=AsignacionHorarioOut)
-def get_asignacion_horario_by_id(
-    asignacion_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    asignacion = db.query(AsignacionHorario).filter(AsignacionHorario.id == asignacion_id).first()
-    if not asignacion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Asignación de horario con ID {asignacion_id} no encontrada"
-        )
-    return asignacion
-
-@router.delete("/asignacion-horarios/{asignacion_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_asignacion_horario(
-    asignacion_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_asignacion = db.query(AsignacionHorario).filter(AsignacionHorario.id == asignacion_id).first()
-    if not db_asignacion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Asignación de horario con ID {asignacion_id} no encontrada"
-        )
-    
-    db.delete(db_asignacion)
-    db.commit()
-    return None
-
-# Rutas para Días Festivos
-@router.post("/dias-festivos", response_model=DiaFestivoOut, status_code=status.HTTP_201_CREATED)
-def create_dia_festivo(
-    dia_festivo: DiaFestivoCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    # Verificar si ya existe un día festivo en esa fecha
-    fecha_inicio = datetime.combine(dia_festivo.fecha.date(), time.min)
-    fecha_fin = datetime.combine(dia_festivo.fecha.date(), time.max)
-    
-    existente = db.query(DiaFestivo).filter(
-        DiaFestivo.fecha >= fecha_inicio,
-        DiaFestivo.fecha <= fecha_fin
-    ).first()
-    
-    if existente:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ya existe un día festivo registrado para la fecha {dia_festivo.fecha.date()}"
-        )
-    
-    db_dia_festivo = DiaFestivo(**dia_festivo.dict())
-    db.add(db_dia_festivo)
-    db.commit()
-    db.refresh(db_dia_festivo)
-    return db_dia_festivo
-
-@router.get("/dias-festivos", response_model=List[DiaFestivoOut])
-def get_dias_festivos(
-    skip: int = 0, 
-    limit: int = 100,
-    fecha_inicio: Optional[date] = None,
-    fecha_fin: Optional[date] = None,
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    query = db.query(DiaFestivo)
-    
-    # Aplicar filtros si se proporcionan
-    if fecha_inicio:
-        query = query.filter(DiaFestivo.fecha >= datetime.combine(fecha_inicio, time.min))
-    
-    if fecha_fin:
-        query = query.filter(DiaFestivo.fecha <= datetime.combine(fecha_fin, time.max))
-    
-    return query.offset(skip).limit(limit).all()
-
-@router.get("/dias-festivos/{dia_festivo_id}", response_model=DiaFestivoOut)
-def get_dia_festivo_by_id(
-    dia_festivo_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    dia_festivo = db.query(DiaFestivo).filter(DiaFestivo.id == dia_festivo_id).first()
-    if not dia_festivo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Día festivo con ID {dia_festivo_id} no encontrado"
-        )
-    return dia_festivo
-
-@router.put("/dias-festivos/{dia_festivo_id}", response_model=DiaFestivoOut)
-def update_dia_festivo(
-    dia_festivo_id: int, 
-    dia_festivo_update: DiaFestivoUpdate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_dia_festivo = db.query(DiaFestivo).filter(DiaFestivo.id == dia_festivo_id).first()
-    if not db_dia_festivo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Día festivo con ID {dia_festivo_id} no encontrado"
-        )
-    
-    # Actualizar campos si están presentes en la solicitud
-    update_data = dia_festivo_update.dict(exclude_unset=True)
-    
-    # Si se actualiza la fecha, verificar que no exista otro día festivo en esa fecha
-    if "fecha" in update_data and update_data["fecha"] != db_dia_festivo.fecha:
-        fecha_inicio = datetime.combine(update_data["fecha"].date(), time.min)
-        fecha_fin = datetime.combine(update_data["fecha"].date(), time.max)
+    """Eliminar un horario (solo si no tiene trabajadores asignados)"""
+    try:
+        db_horario = db.query(Horario).filter(Horario.id == horario_id).first()
+        if not db_horario:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Horario con ID {horario_id} no encontrado"
+            )
         
-        existente = db.query(DiaFestivo).filter(
-            DiaFestivo.fecha >= fecha_inicio,
-            DiaFestivo.fecha <= fecha_fin,
-            DiaFestivo.id != dia_festivo_id
+        # Verificar si hay trabajadores asignados a este horario
+        trabajadores_asignados = db.query(Trabajador).filter(
+            Trabajador.id_horario == horario_id
         ).first()
         
-        if existente:
+        if trabajadores_asignados:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Ya existe un día festivo registrado para la fecha {update_data['fecha'].date()}"
+                detail="No se puede eliminar el horario porque tiene trabajadores asignados"
             )
-    
-    for key, value in update_data.items():
-        setattr(db_dia_festivo, key, value)
-    
-    db.commit()
-    db.refresh(db_dia_festivo)
-    return db_dia_festivo
-
-@router.delete("/dias-festivos/{dia_festivo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_dia_festivo(
-    dia_festivo_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_dia_festivo = db.query(DiaFestivo).filter(DiaFestivo.id == dia_festivo_id).first()
-    if not db_dia_festivo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Día festivo con ID {dia_festivo_id} no encontrado"
-        )
-    
-    db.delete(db_dia_festivo)
-    db.commit()
-    return None
-
-# Rutas para Centros de Trabajo
-@router.post("/centros-trabajo", response_model=CentroTrabajoOut, status_code=status.HTTP_201_CREATED)
-def create_centro_trabajo(
-    centro_trabajo: CentroTrabajoCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    # Verificar si ya existe un centro de trabajo con la misma clave
-    existente = db.query(CentroTrabajo).filter(CentroTrabajo.claveCT == centro_trabajo.claveCT).first()
-    if existente:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ya existe un centro de trabajo con la clave {centro_trabajo.claveCT}"
-        )
-    
-    # Convertir el logo de base64 a bytes
-    logo_bytes = base64.b64decode(centro_trabajo.logo)
-    
-    # Crear un nuevo objeto CentroTrabajo
-    db_centro_trabajo = CentroTrabajo(
-        claveCT=centro_trabajo.claveCT,
-        entidadFederativa=centro_trabajo.entidadFederativa,
-        ubicacion=centro_trabajo.ubicacion,
-        nivel=centro_trabajo.nivel,
-        plantel=centro_trabajo.plantel,
-        logo=logo_bytes
-    )
-    
-    db.add(db_centro_trabajo)
-    db.commit()
-    db.refresh(db_centro_trabajo)
-    return db_centro_trabajo
-
-@router.get("/centros-trabajo", response_model=List[CentroTrabajoOut])
-def get_centros_trabajo(
-    skip: int = 0, 
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    return db.query(CentroTrabajo).offset(skip).limit(limit).all()
-
-@router.get("/centros-trabajo/{centro_trabajo_id}", response_model=CentroTrabajoOut)
-def get_centro_trabajo_by_id(
-    centro_trabajo_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    centro_trabajo = db.query(CentroTrabajo).filter(CentroTrabajo.id == centro_trabajo_id).first()
-    if not centro_trabajo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Centro de trabajo con ID {centro_trabajo_id} no encontrado"
-        )
-    return centro_trabajo
-
-@router.put("/centros-trabajo/{centro_trabajo_id}", response_model=CentroTrabajoOut)
-def update_centro_trabajo(
-    centro_trabajo_id: int, 
-    centro_trabajo_update: CentroTrabajoUpdate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    db_centro_trabajo = db.query(CentroTrabajo).filter(CentroTrabajo.id == centro_trabajo_id).first()
-    if not db_centro_trabajo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Centro de trabajo con ID {centro_trabajo_id} no encontrado"
-        )
-    
-    # Actualizar campos si están presentes en la solicitud
-    update_data = centro_trabajo_update.dict(exclude_unset=True)
-    
-    # Si se actualiza la clave, verificar que no exista otro centro con esa clave
-    if "claveCT" in update_data and update_data["claveCT"] != db_centro_trabajo.claveCT:
-        existente = db.query(CentroTrabajo).filter(
-            CentroTrabajo.claveCT == update_data["claveCT"],
-            CentroTrabajo.id != centro_trabajo_id
-        ).first()
         
-        if existente:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Ya existe un centro de trabajo con la clave {update_data['claveCT']}"
-            )
-    
-    # Manejar el logo si está presente
-    if "logo" in update_data and update_data["logo"]:
-        update_data["logo"] = base64.b64decode(update_data["logo"])
-    
-    for key, value in update_data.items():
-        setattr(db_centro_trabajo, key, value)
-    
-    db.commit()
-    db.refresh(db_centro_trabajo)
-    return db_centro_trabajo
+        # Eliminar asignaciones históricas primero
+        db.query(AsignacionHorario).filter(AsignacionHorario.id_horario == horario_id).delete()
+        
+        # Eliminar el horario
+        db.delete(db_horario)
+        db.commit()
+        
+        return None
+        
+    except HTTPException as he:
+        db.rollback()
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al eliminar horario: {str(e)}"
+        )
 
-@router.delete("/centros-trabajo/{centro_trabajo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_centro_trabajo(
-    centro_trabajo_id: int, 
+# ====== RUTAS PARA ASIGNACIÓN DE HORARIOS ======
+
+@router.post("/horarios/{horario_id}/asignar", response_model=AsignacionHorarioOut, status_code=status.HTTP_201_CREATED)
+def asignar_horario_a_trabajador(
+    horario_id: int,
+    asignacion: AsignacionHorarioCreate,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
-    db_centro_trabajo = db.query(CentroTrabajo).filter(CentroTrabajo.id == centro_trabajo_id).first()
-    if not db_centro_trabajo:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Centro de trabajo con ID {centro_trabajo_id} no encontrado"
+    """Asignar un horario a un trabajador"""
+    try:
+        # Verificar que el horario existe
+        horario = db.query(Horario).filter(Horario.id == horario_id).first()
+        if not horario:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Horario con ID {horario_id} no encontrado"
+            )
+        
+        # Verificar que el trabajador existe
+        trabajador = db.query(Trabajador).filter(Trabajador.id == asignacion.id_trabajador).first()
+        if not trabajador:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trabajador con ID {asignacion.id_trabajador} no encontrado"
+            )
+        
+        # Crear la asignación histórica
+        db_asignacion = AsignacionHorario(
+            id_trabajador=asignacion.id_trabajador,
+            id_horario=horario_id,
+            fehcaInicio=asignacion.fehcaInicio or datetime.now()
         )
-    
-    # Verificar si hay trabajadores asignados a este centro
-    trabajadores = db.query(Trabajador).filter(Trabajador.id_centroTrabajo == centro_trabajo_id).first()
-    if trabajadores:
+        db.add(db_asignacion)
+        
+        # Actualizar el horario actual del trabajador
+        trabajador.id_horario = horario_id
+        
+        db.commit()
+        db.refresh(db_asignacion)
+        
+        return db_asignacion
+        
+    except HTTPException as he:
+        db.rollback()
+        raise he
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al asignar horario: {str(e)}"
+        )
+
+@router.get("/trabajadores/{trabajador_id}/horarios", response_model=List[AsignacionHorarioOut])
+def get_historial_horarios_trabajador(
+    trabajador_id: int,
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    """Obtener el historial de horarios de un trabajador"""
+    try:
+        # Verificar que el trabajador existe
+        trabajador = db.query(Trabajador).filter(Trabajador.id == trabajador_id).first()
+        if not trabajador:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trabajador con ID {trabajador_id} no encontrado"
+            )
+        
+        # Obtener historial de asignaciones
+        asignaciones = db.query(AsignacionHorario).filter(
+            AsignacionHorario.id_trabajador == trabajador_id
+        ).order_by(AsignacionHorario.fehcaInicio.desc()).all()
+        
+        return asignaciones
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener historial de horarios: {str(e)}"
+        )
+
+@router.get("/horarios/trabajadores-sin-horario")
+def get_trabajadores_sin_horario(
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    """Obtener trabajadores que no tienen horario asignado"""
+    try:
+        trabajadores_sin_horario = db.query(Trabajador).filter(
+            Trabajador.id_horario.is_(None),
+            Trabajador.estado == True
+        ).all()
+        
+        # Obtener departamentos para agrupar
+        result = []
+        for trabajador in trabajadores_sin_horario:
+            departamento = db.query(Departamento).filter(
+                Departamento.id == trabajador.departamento
+            ).first()
+            
+            result.append({
+                "id": trabajador.id,
+                "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+                "rfc": trabajador.rfc,
+                "puesto": trabajador.puesto,
+                "departamento": departamento.descripcion if departamento else "Sin departamento"
+            })
+        
+        return {
+            "trabajadores": result,
+            "total": len(result)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener trabajadores sin horario: {str(e)}"
+        )
+
+@router.get("/horarios/resumen")
+def get_resumen_horarios(
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    """Obtener resumen estadístico de horarios"""
+    try:
+        # Total de horarios
+        total_horarios = db.query(Horario).count()
+        
+        # Total de trabajadores con horario asignado
+        trabajadores_con_horario = db.query(Trabajador).filter(
+            Trabajador.id_horario.isnot(None),
+            Trabajador.estado == True
+        ).count()
+        
+        # Total de trabajadores sin horario
+        trabajadores_sin_horario = db.query(Trabajador).filter(
+            Trabajador.id_horario.is_(None),
+            Trabajador.estado == True
+        ).count()
+        
+        # Horarios más utilizados
+        horarios_populares = db.query(
+            Horario.id,
+            Horario.descripcion,
+            db.func.count(Trabajador.id).label('total_trabajadores')
+        ).outerjoin(
+            Trabajador, Horario.id == Trabajador.id_horario
+        ).filter(
+            Trabajador.estado == True
+        ).group_by(
+            Horario.id, Horario.descripcion
+        ).order_by(
+            db.func.count(Trabajador.id).desc()
+        ).limit(5).all()
+        
+        return {
+            "total_horarios": total_horarios,
+            "trabajadores_con_horario": trabajadores_con_horario,
+            "trabajadores_sin_horario": trabajadores_sin_horario,
+            "horarios_mas_utilizados": [
+                {
+                    "id": horario.id,
+                    "descripcion": horario.descripcion,
+                    "total_trabajadores": horario.total_trabajadores
+                }
+                for horario in horarios_populares
+            ]
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al obtener resumen de horarios: {str(e)}"
+        )
+
+# ====== RUTAS PARA VALIDACIÓN Y UTILIDADES ======
+
+@router.get("/horarios/validar-tiempo")
+def validar_horario_tiempo(
+    hora_entrada: str = Query(..., description="Hora de entrada en formato HH:MM"),
+    hora_salida: str = Query(..., description="Hora de salida en formato HH:MM"),
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    """Validar que un horario tenga tiempos lógicos"""
+    try:
+        from datetime import datetime
+        
+        # Convertir strings a objetos time
+        entrada = datetime.strptime(hora_entrada, "%H:%M").time()
+        salida = datetime.strptime(hora_salida, "%H:%M").time()
+        
+        # Validaciones
+        es_valido = True
+        errores = []
+        
+        # Verificar que la hora de salida sea después de la entrada
+        if salida <= entrada:
+            es_valido = False
+            errores.append("La hora de salida debe ser posterior a la hora de entrada")
+        
+        # Calcular duración de la jornada
+        entrada_minutes = entrada.hour * 60 + entrada.minute
+        salida_minutes = salida.hour * 60 + salida.minute
+        duracion_minutes = salida_minutes - entrada_minutes
+        
+        # Verificar duración mínima y máxima
+        if duracion_minutes < 240:  # 4 horas mínimo
+            es_valido = False
+            errores.append("La jornada laboral debe ser de al menos 4 horas")
+        
+        if duracion_minutes > 480:  # 8 horas máximo
+            errores.append("Advertencia: Jornada laboral mayor a 8 horas")
+        
+        return {
+            "es_valido": es_valido,
+            "errores": errores,
+            "duracion_horas": round(duracion_minutes / 60, 2),
+            "duracion_minutos": duracion_minutes
+        }
+        
+    except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se puede eliminar el centro de trabajo porque tiene trabajadores asignados"
+            detail=f"Formato de hora inválido. Use HH:MM: {str(ve)}"
         )
-    
-    db.delete(db_centro_trabajo)
-    db.commit()
-    return None
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al validar horario: {str(e)}"
+        )
