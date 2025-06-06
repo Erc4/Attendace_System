@@ -170,33 +170,133 @@ const justificacionService = {
   },
 };
 
-// Servicios para horarios
+// Servicios para horarios - COMPLETAMENTE ACTUALIZADO
 const horarioService = {
-  getAll: async () => {
-    const response = await axiosInstance.get('/horarios');
-    return response.data;
+  // Obtener todos los horarios con filtros
+  getAll: async (params = {}) => {
+    try {
+      const queryParams = new URLSearchParams();
+      
+      if (params.skip) queryParams.append('skip', params.skip);
+      if (params.limit) queryParams.append('limit', params.limit);
+      if (params.descripcion) queryParams.append('descripcion', params.descripcion);
+      
+      const response = await axiosInstance.get(`/horarios?${queryParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener horarios:', error);
+      throw error;
+    }
   },
-  
+
+  // Obtener horario por ID con detalles completos
   getById: async (id) => {
-    const response = await axiosInstance.get(`/horarios/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/horarios/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener horario:', error);
+      throw error;
+    }
   },
-  
-  create: async (horario) => {
-    const response = await axiosInstance.post('/horarios', horario);
-    return response.data;
+
+  // Crear nuevo horario
+  create: async (horarioData) => {
+    try {
+      console.log('Creando horario:', horarioData);
+      const response = await axiosInstance.post('/horarios', horarioData);
+      return response.data;
+    } catch (error) {
+      console.error('Error al crear horario:', error);
+      throw error;
+    }
   },
-  
-  update: async (id, horario) => {
-    const response = await axiosInstance.put(`/horarios/${id}`, horario);
-    return response.data;
+
+  // Actualizar horario existente
+  update: async (id, horarioData) => {
+    try {
+      console.log('Actualizando horario:', id, horarioData);
+      const response = await axiosInstance.put(`/horarios/${id}`, horarioData);
+      return response.data;
+    } catch (error) {
+      console.error('Error al actualizar horario:', error);
+      throw error;
+    }
   },
-  
+
+  // Eliminar horario
   delete: async (id) => {
-    const response = await axiosInstance.delete(`/horarios/${id}`);
-    return response.data;
+    try {
+      await axiosInstance.delete(`/horarios/${id}`);
+      return true;
+    } catch (error) {
+      console.error('Error al eliminar horario:', error);
+      throw error;
+    }
   },
-  
+
+  // Asignar horario a trabajador
+  asignarTrabajador: async (horarioId, asignacionData) => {
+    try {
+      console.log('Asignando trabajador a horario:', horarioId, asignacionData);
+      const response = await axiosInstance.post(`/horarios/${horarioId}/asignar`, asignacionData);
+      return response.data;
+    } catch (error) {
+      console.error('Error al asignar trabajador:', error);
+      throw error;
+    }
+  },
+
+  // Obtener historial de horarios de un trabajador
+  getHistorialTrabajador: async (trabajadorId) => {
+    try {
+      const response = await axiosInstance.get(`/trabajadores/${trabajadorId}/horarios`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener historial de horarios:', error);
+      throw error;
+    }
+  },
+
+  // Obtener trabajadores sin horario asignado
+  getTrabajadoresSinHorario: async () => {
+    try {
+      const response = await axiosInstance.get('/horarios/trabajadores-sin-horario');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener trabajadores sin horario:', error);
+      throw error;
+    }
+  },
+
+  // Obtener resumen estadístico de horarios
+  getResumen: async () => {
+    try {
+      const response = await axiosInstance.get('/horarios/resumen');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener resumen de horarios:', error);
+      throw error;
+    }
+  },
+
+  // Validar horario (entrada y salida)
+  validarTiempo: async (horaEntrada, horaSalida) => {
+    try {
+      const response = await axiosInstance.get('/horarios/validar-tiempo', {
+        params: {
+          hora_entrada: horaEntrada,
+          hora_salida: horaSalida
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al validar horario:', error);
+      throw error;
+    }
+  },
+
+  // Obtener días festivos
   getDiasFestivos: async () => {
     const response = await axiosInstance.get('/dias-festivos');
     return response.data;
@@ -309,12 +409,13 @@ const catalogoService = {
     return response.data;
   },
 
+  // Utilizar el servicio de horarios para catálogos
   getHorarios: async () => {
     const response = await axiosInstance.get('/horarios');
     return response.data;
   },
 
-  //Crear nuevos catálogos
+  // Crear nuevos catálogos
   createDepartamento: async (departamento) => {
     const response = await axiosInstance.post('/departamentos', departamento);
     return response.data;
@@ -341,7 +442,112 @@ const catalogoService = {
   },
 };
 
+// Utilidades para horarios
+const horarioUtils = {
+  // Formatear tiempo para mostrar
+  formatTime: (timeString) => {
+    if (!timeString) return '--:--';
+    return timeString.substring(0, 5);
+  },
 
+  // Calcular duración entre dos horarios
+  calcularDuracion: (entrada, salida) => {
+    if (!entrada || !salida) return null;
+    
+    const [horaEntrada, minutoEntrada] = entrada.split(':').map(Number);
+    const [horaSalida, minutoSalida] = salida.split(':').map(Number);
+    
+    const minutosEntrada = horaEntrada * 60 + minutoEntrada;
+    const minutosSalida = horaSalida * 60 + minutoSalida;
+    
+    if (minutosSalida <= minutosEntrada) return null;
+    
+    const duracionMinutos = minutosSalida - minutosEntrada;
+    const horas = Math.floor(duracionMinutos / 60);
+    const minutos = duracionMinutos % 60;
+    
+    return {
+      horas,
+      minutos,
+      totalMinutos: duracionMinutos,
+      formatoTexto: `${horas}h ${minutos}m`
+    };
+  },
+
+  // Validar si un horario es válido
+  validarHorario: (entrada, salida) => {
+    const duracion = horarioUtils.calcularDuracion(entrada, salida);
+    
+    if (!duracion) {
+      return {
+        esValido: false,
+        errores: ['La hora de salida debe ser posterior a la hora de entrada']
+      };
+    }
+    
+    const errores = [];
+    
+    if (duracion.totalMinutos < 240) { // Menos de 4 horas
+      errores.push('La jornada laboral debe ser de al menos 4 horas');
+    }
+    
+    if (duracion.totalMinutos > 480) { // Más de 8 horas
+      errores.push('Advertencia: Jornada laboral mayor a 8 horas');
+    }
+    
+    return {
+      esValido: errores.length === 0 || errores.every(e => e.includes('Advertencia')),
+      errores,
+      duracion
+    };
+  },
+
+  // Obtener horarios predefinidos
+  getHorariosPredefinidos: () => [
+    {
+      tipo: 'matutino',
+      nombre: 'Matutino (8:00-16:00)',
+      entrada: '08:00',
+      salida: '16:00'
+    },
+    {
+      tipo: 'vespertino',
+      nombre: 'Vespertino (14:00-22:00)',
+      entrada: '14:00',
+      salida: '22:00'
+    },
+    {
+      tipo: 'mixto',
+      nombre: 'Mixto (8:00-14:00)',
+      entrada: '08:00',
+      salida: '14:00'
+    },
+    {
+      tipo: 'nocturno',
+      nombre: 'Nocturno (22:00-06:00)',
+      entrada: '22:00',
+      salida: '06:00'
+    }
+  ],
+
+  // Copiar horario a todos los días
+  copiarHorarioATodos: (horarioBase, diaOrigen) => {
+    const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+    const resultado = { ...horarioBase };
+    
+    const entradaOrigen = horarioBase[`${diaOrigen}Entrada`];
+    const salidaOrigen = horarioBase[`${diaOrigen}Salida`];
+    
+    dias.forEach(dia => {
+      if (dia !== diaOrigen) {
+        resultado[`${dia}Entrada`] = entradaOrigen;
+        resultado[`${dia}Salida`] = salidaOrigen;
+      }
+    });
+    
+    return resultado;
+  }
+};
 
 export {
   authService,
@@ -351,4 +557,5 @@ export {
   horarioService,
   reporteService,
   catalogoService,
-};
+  horarioUtils,
+}; 

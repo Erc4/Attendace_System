@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, date, time
-from typing import Optional
+from typing import Optional, List
 
 # Schemas base para las tablas relacionadas
 class TipoTrabajadorBase(BaseModel):
@@ -344,3 +344,83 @@ class ReporteFiltros(BaseModel):
     fecha_fin: Optional[date] = None
     departamento_id: Optional[int] = None
     trabajador_id: Optional[int] = None
+
+class HorarioBase(BaseModel):
+    descripcion: str
+    lunesEntrada: time
+    lunesSalida: time
+    martesEntrada: time
+    martesSalida: time
+    miercolesEntrada: time
+    miercolesSalida: time
+    juevesEntrada: time
+    juevesSalida: time
+    viernesEntrada: time
+    viernesSalida: time
+
+class HorarioCreate(HorarioBase):
+    pass
+
+class HorarioUpdate(BaseModel):
+    descripcion: Optional[str] = None
+    lunesEntrada: Optional[time] = None
+    lunesSalida: Optional[time] = None
+    martesEntrada: Optional[time] = None
+    martesSalida: Optional[time] = None
+    miercolesEntrada: Optional[time] = None
+    miercolesSalida: Optional[time] = None
+    juevesEntrada: Optional[time] = None
+    juevesSalida: Optional[time] = None
+    viernesEntrada: Optional[time] = None
+    viernesSalida: Optional[time] = None
+
+class HorarioOut(HorarioBase):
+    id: int
+    
+    class Config:
+        from_attributes = True
+
+class TrabajadorSimple(BaseModel):
+    id: int
+    nombre: str
+    rfc: str
+    puesto: str
+    
+    class Config:
+        from_attributes = True
+
+class HorarioDetalladoOut(BaseModel):
+    horario: HorarioOut
+    trabajadores_asignados: List[TrabajadorSimple]
+    total_trabajadores: int
+    asignaciones_historicas: List[dict]
+
+# ====== SCHEMAS PARA ASIGNACIÓN DE HORARIOS ======
+
+class AsignacionHorarioBase(BaseModel):
+    id_trabajador: int
+    fehcaInicio: Optional[datetime] = None
+
+class AsignacionHorarioCreate(AsignacionHorarioBase):
+    pass
+
+class AsignacionHorarioOut(AsignacionHorarioBase):
+    id: int
+    id_horario: int
+    
+    class Config:
+        from_attributes = True
+
+# ====== SCHEMAS PARA REPORTES Y VALIDACIONES ======
+
+class ValidacionHorarioOut(BaseModel):
+    es_valido: bool
+    errores: List[str]
+    duracion_horas: float
+    duracion_minutos: int
+
+class ResumenHorariosOut(BaseModel):
+    total_horarios: int
+    trabajadores_con_horario: int
+    trabajadores_sin_horario: int
+    horarios_mas_utilizados: List[dict]
