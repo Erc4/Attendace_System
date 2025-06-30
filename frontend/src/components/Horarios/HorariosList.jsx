@@ -497,21 +497,12 @@ const HorariosList = () => {
             Cancelar
           </Button>
           <Button onClick={handleDeleteConfirm} color="error" autoFocus>
-            Eliminar
+            Eliminar  
           </Button>
         </DialogActions>
       </Dialog>
       
       {/* Botón flotante para acceso rápido */}
-      <Fab
-        color="primary"
-        aria-label="add"
-        sx={{ position: 'fixed', bottom: 16, right: 16 }}
-        component={RouterLink}
-        to="/horarios/nuevo"
-      >
-        <AddIcon />
-      </Fab>
     </Container>
   );
 };

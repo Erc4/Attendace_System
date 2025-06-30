@@ -39,24 +39,46 @@ axiosInstance.interceptors.response.use(
 // Servicios de autenticación
 const authService = {
   login: async (rfc, password) => {
-    const response = await axiosInstance.post('/login', { rfc, password });
-    if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token);
+    try {
+      console.log('🔐 Intentando login para:', rfc);
+      const response = await axiosInstance.post('/login', { rfc, password });
+      if (response.data.access_token) {
+        localStorage.setItem('token', response.data.access_token);
+        console.log('✅ Login exitoso');
+      }
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error en login:', error);
+      throw error;
     }
-    return response.data;
   },
   
   loginWithBiometric: async (huellaBase64) => {
-    const response = await axiosInstance.post('/biometrico/autenticar', { huella_base64: huellaBase64 });
-    return response.data;
+    try {
+      console.log('👆 Intentando login biométrico');
+      const response = await axiosInstance.post('/biometrico/autenticar', { huella_base64: huellaBase64 });
+      console.log('✅ Login biométrico exitoso');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error en login biométrico:', error);
+      throw error;
+    }
   },
   
   registrarAsistenciaBiometrica: async (huellaBase64) => {
-    const response = await axiosInstance.post('/biometrico/registrar-asistencia', { huella_base64: huellaBase64 });
-    return response.data;
+    try {
+      console.log('👆 Registrando asistencia biométrica');
+      const response = await axiosInstance.post('/biometrico/registrar-asistencia', { huella_base64: huellaBase64 });
+      console.log('✅ Asistencia biométrica registrada');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error en registro biométrico:', error);
+      throw error;
+    }
   },
   
   logout: () => {
+    console.log('🚪 Cerrando sesión');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
@@ -67,106 +89,282 @@ const authService = {
   },
 };
 
-// Servicios para trabajadores
+// Servicios para trabajadores - VERSIÓN CORREGIDA
 const trabajadorService = {
   getAll: async (params = {}) => {
-    const response = await axiosInstance.get('/trabajadores', { params });
-    return response.data;
+    try {
+      console.log('📤 Solicitando trabajadores con parámetros:', params);
+      const response = await axiosInstance.get('/trabajadores', { params });
+      console.log('📥 Respuesta trabajadores:', response.data);
+      
+      // Validar que la respuesta sea un array
+      if (!Array.isArray(response.data)) {
+        console.error('❌ La respuesta de trabajadores no es un array:', response.data);
+        throw new Error('Formato de datos inválido: se esperaba un array de trabajadores');
+      }
+      
+      console.log('✅ Trabajadores validados:', response.data.length, 'elementos');
+      return response.data;
+      
+    } catch (error) {
+      console.error('❌ Error al obtener trabajadores:', error);
+      console.error('❌ URL del endpoint:', `${axiosInstance.defaults.baseURL}/trabajadores`);
+      console.error('❌ Parámetros enviados:', params);
+      console.error('❌ Response status:', error.response?.status);
+      console.error('❌ Response data:', error.response?.data);
+      
+      // Si hay problemas con el servidor, retornar array vacío para evitar crashes
+      if (error.response?.status === 500 || error.code === 'ECONNREFUSED') {
+        console.log('⚠️ Retornando array vacío debido a error del servidor');
+        return [];
+      }
+      
+      throw error;
+    }
   },
   
   getById: async (id) => {
-    const response = await axiosInstance.get(`/trabajadores/${id}`);
-    return response.data;
+    try {
+      console.log('📤 Solicitando trabajador por ID:', id);
+      const response = await axiosInstance.get(`/trabajadores/${id}`);
+      console.log('📥 Trabajador obtenido:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener trabajador por ID:', error);
+      throw error;
+    }
   },
   
   create: async (trabajador) => {
-    const response = await axiosInstance.post('/trabajadores', trabajador);
-    return response.data;
+    try {
+      console.log('📤 Creando trabajador:', trabajador);
+      const response = await axiosInstance.post('/trabajadores', trabajador);
+      console.log('✅ Trabajador creado:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear trabajador:', error);
+      throw error;
+    }
   },
   
   update: async (id, trabajador) => {
-    const response = await axiosInstance.put(`/trabajadores/${id}`, trabajador);
-    return response.data;
+    try {
+      console.log('📤 Actualizando trabajador:', id, trabajador);
+      const response = await axiosInstance.put(`/trabajadores/${id}`, trabajador);
+      console.log('✅ Trabajador actualizado:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar trabajador:', error);
+      throw error;
+    }
   },
   
   delete: async (id) => {
-    const response = await axiosInstance.delete(`/trabajadores/${id}`);
-    return response.data;
+    try {
+      console.log('🗑️ Eliminando trabajador:', id);
+      const response = await axiosInstance.delete(`/trabajadores/${id}`);
+      console.log('✅ Trabajador eliminado');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al eliminar trabajador:', error);
+      throw error;
+    }
   },
 };
 
-// Servicios para asistencias
+// Servicios para asistencias - VERSIÓN CORREGIDA
 const asistenciaService = {
   getAll: async (params = {}) => {
-    const response = await axiosInstance.get('/asistencias', { params });
-    return response.data;
+    try {
+      console.log('📤 Solicitando asistencias con parámetros:', params);
+      const response = await axiosInstance.get('/asistencias', { params });
+      console.log('📥 Respuesta de asistencias:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener asistencias:', error);
+      throw error;
+    }
   },
   
   getById: async (id) => {
-    const response = await axiosInstance.get(`/asistencias/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/asistencias/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener asistencia por ID:', error);
+      throw error;
+    }
   },
   
   create: async (asistencia) => {
-    const response = await axiosInstance.post('/asistencias', asistencia);
-    return response.data;
+    try {
+      console.log('📤 Creando asistencia:', asistencia);
+      const response = await axiosInstance.post('/asistencias', asistencia);
+      console.log('✅ Asistencia creada:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear asistencia:', error);
+      console.error('❌ Response data:', error.response?.data);
+      throw error;
+    }
   },
   
   update: async (id, asistencia) => {
-    const response = await axiosInstance.put(`/asistencias/${id}`, asistencia);
-    return response.data;
+    try {
+      console.log('📤 Actualizando asistencia:', id, asistencia);
+      const response = await axiosInstance.put(`/asistencias/${id}`, asistencia);
+      console.log('✅ Asistencia actualizada:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar asistencia:', error);
+      throw error;
+    }
   },
   
   delete: async (id) => {
-    const response = await axiosInstance.delete(`/asistencias/${id}`);
-    return response.data;
+    try {
+      console.log('🗑️ Eliminando asistencia:', id);
+      const response = await axiosInstance.delete(`/asistencias/${id}`);
+      console.log('✅ Asistencia eliminada');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al eliminar asistencia:', error);
+      throw error;
+    }
   },
   
   getAsistenciasByTrabajador: async (trabajadorId, fechaInicio, fechaFin) => {
-    const params = {};
-    if (fechaInicio) params.fecha_inicio = fechaInicio;
-    if (fechaFin) params.fecha_fin = fechaFin;
-    
-    const response = await axiosInstance.get(`/asistencias/trabajador/${trabajadorId}`, { params });
-    return response.data;
+    try {
+      const params = {};
+      if (fechaInicio) params.fecha_inicio = fechaInicio;
+      if (fechaFin) params.fecha_fin = fechaFin;
+      
+      console.log('📤 Solicitando asistencias por trabajador:', trabajadorId, params);
+      const response = await axiosInstance.get(`/asistencias/trabajador/${trabajadorId}`, { params });
+      console.log('📥 Asistencias del trabajador:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener asistencias del trabajador:', error);
+      throw error;
+    }
   },
   
   getAsistenciasHoy: async () => {
-    const response = await axiosInstance.get('/asistencias/hoy');
-    return response.data;
+    try {
+      console.log('📤 Solicitando asistencias de hoy...');
+      const response = await axiosInstance.get('/asistencias/hoy');
+      console.log('📥 Respuesta asistencias hoy:', response.data);
+      
+      // Validar estructura de la respuesta
+      if (!response.data || typeof response.data !== 'object') {
+        throw new Error('Respuesta inválida del servidor para asistencias de hoy');
+      }
+      
+      // Asegurar que tenga la estructura esperada
+      const normalizedData = {
+        fecha: response.data.fecha || new Date().toISOString().split('T')[0],
+        estadisticas: response.data.estadisticas || {
+          total_trabajadores: 0,
+          asistencias: 0,
+          retardos: 0,
+          faltas: 0,
+          no_registrados: 0,
+          porcentaje_asistencia: 0
+        },
+        registros: Array.isArray(response.data.registros) ? response.data.registros : []
+      };
+      
+      console.log('✅ Datos normalizados:', normalizedData);
+      return normalizedData;
+      
+    } catch (error) {
+      console.error('❌ Error al obtener asistencias de hoy:', error);
+      console.error('❌ URL del endpoint:', `${axiosInstance.defaults.baseURL}/asistencias/hoy`);
+      console.error('❌ Response status:', error.response?.status);
+      console.error('❌ Response data:', error.response?.data);
+      
+      // Retornar estructura vacía en caso de error para evitar crashes
+      if (error.response?.status === 404 || error.response?.status === 500) {
+        console.log('⚠️ Retornando estructura vacía debido a error del servidor');
+        return {
+          fecha: new Date().toISOString().split('T')[0],
+          estadisticas: {
+            total_trabajadores: 0,
+            asistencias: 0,
+            retardos: 0,
+            faltas: 0,
+            no_registrados: 0,
+            porcentaje_asistencia: 0
+          },
+          registros: []
+        };
+      }
+      
+      throw error;
+    }
   },
 };
 
 // Servicios para justificaciones
 const justificacionService = {
   getAll: async (params = {}) => {
-    const response = await axiosInstance.get('/justificaciones', { params });
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/justificaciones', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener justificaciones:', error);
+      throw error;
+    }
   },
   
   getById: async (id) => {
-    const response = await axiosInstance.get(`/justificaciones/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/justificaciones/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener justificación:', error);
+      throw error;
+    }
   },
   
   create: async (justificacion) => {
-    const response = await axiosInstance.post('/justificaciones', justificacion);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/justificaciones', justificacion);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear justificación:', error);
+      throw error;
+    }
   },
   
   update: async (id, justificacion) => {
-    const response = await axiosInstance.put(`/justificaciones/${id}`, justificacion);
-    return response.data;
+    try {
+      const response = await axiosInstance.put(`/justificaciones/${id}`, justificacion);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar justificación:', error);
+      throw error;
+    }
   },
   
   delete: async (id) => {
-    const response = await axiosInstance.delete(`/justificaciones/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.delete(`/justificaciones/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al eliminar justificación:', error);
+      throw error;
+    }
   },
   
   getReglasJustificacion: async () => {
-    const response = await axiosInstance.get('/reglas-justificacion');
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/reglas-justificacion');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reglas de justificación:', error);
+      throw error;
+    }
   },
 };
 
@@ -181,10 +379,12 @@ const horarioService = {
       if (params.limit) queryParams.append('limit', params.limit);
       if (params.descripcion) queryParams.append('descripcion', params.descripcion);
       
+      console.log('📤 Solicitando horarios con parámetros:', params);
       const response = await axiosInstance.get(`/horarios?${queryParams.toString()}`);
+      console.log('📥 Horarios obtenidos:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error al obtener horarios:', error);
+      console.error('❌ Error al obtener horarios:', error);
       throw error;
     }
   },
@@ -195,7 +395,7 @@ const horarioService = {
       const response = await axiosInstance.get(`/horarios/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error al obtener horario:', error);
+      console.error('❌ Error al obtener horario:', error);
       throw error;
     }
   },
@@ -203,11 +403,12 @@ const horarioService = {
   // Crear nuevo horario
   create: async (horarioData) => {
     try {
-      console.log('Creando horario:', horarioData);
+      console.log('📤 Creando horario:', horarioData);
       const response = await axiosInstance.post('/horarios', horarioData);
+      console.log('✅ Horario creado:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error al crear horario:', error);
+      console.error('❌ Error al crear horario:', error);
       throw error;
     }
   },
@@ -215,11 +416,12 @@ const horarioService = {
   // Actualizar horario existente
   update: async (id, horarioData) => {
     try {
-      console.log('Actualizando horario:', id, horarioData);
+      console.log('📤 Actualizando horario:', id, horarioData);
       const response = await axiosInstance.put(`/horarios/${id}`, horarioData);
+      console.log('✅ Horario actualizado:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error al actualizar horario:', error);
+      console.error('❌ Error al actualizar horario:', error);
       throw error;
     }
   },
@@ -230,7 +432,7 @@ const horarioService = {
       await axiosInstance.delete(`/horarios/${id}`);
       return true;
     } catch (error) {
-      console.error('Error al eliminar horario:', error);
+      console.error('❌ Error al eliminar horario:', error);
       throw error;
     }
   },
@@ -238,11 +440,11 @@ const horarioService = {
   // Asignar horario a trabajador
   asignarTrabajador: async (horarioId, asignacionData) => {
     try {
-      console.log('Asignando trabajador a horario:', horarioId, asignacionData);
+      console.log('📤 Asignando trabajador a horario:', horarioId, asignacionData);
       const response = await axiosInstance.post(`/horarios/${horarioId}/asignar`, asignacionData);
       return response.data;
     } catch (error) {
-      console.error('Error al asignar trabajador:', error);
+      console.error('❌ Error al asignar trabajador:', error);
       throw error;
     }
   },
@@ -253,7 +455,7 @@ const horarioService = {
       const response = await axiosInstance.get(`/trabajadores/${trabajadorId}/horarios`);
       return response.data;
     } catch (error) {
-      console.error('Error al obtener historial de horarios:', error);
+      console.error('❌ Error al obtener historial de horarios:', error);
       throw error;
     }
   },
@@ -264,7 +466,7 @@ const horarioService = {
       const response = await axiosInstance.get('/horarios/trabajadores-sin-horario');
       return response.data;
     } catch (error) {
-      console.error('Error al obtener trabajadores sin horario:', error);
+      console.error('❌ Error al obtener trabajadores sin horario:', error);
       throw error;
     }
   },
@@ -275,7 +477,7 @@ const horarioService = {
       const response = await axiosInstance.get('/horarios/resumen');
       return response.data;
     } catch (error) {
-      console.error('Error al obtener resumen de horarios:', error);
+      console.error('❌ Error al obtener resumen de horarios:', error);
       throw error;
     }
   },
@@ -291,154 +493,261 @@ const horarioService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error al validar horario:', error);
+      console.error('❌ Error al validar horario:', error);
       throw error;
     }
   },
 
   // Obtener días festivos
   getDiasFestivos: async () => {
-    const response = await axiosInstance.get('/dias-festivos');
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/dias-festivos');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener días festivos:', error);
+      throw error;
+    }
   },
 };
 
 // Servicios para reportes
 const reporteService = {
   getAsistenciasDiarias: async (fecha, departamentoId) => {
-    const params = {};
-    if (fecha) params.fecha = fecha;
-    if (departamentoId) params.departamento_id = departamentoId;
-    
-    const response = await axiosInstance.get('/reportes/asistencias-diarias', { params });
-    return response.data;
+    try {
+      const params = {};
+      if (fecha) params.fecha = fecha;
+      if (departamentoId) params.departamento_id = departamentoId;
+      
+      const response = await axiosInstance.get('/reportes/asistencias-diarias', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte diario:', error);
+      throw error;
+    }
   },
   
   getAsistenciasMensuales: async (anio, mes, departamentoId) => {
-    const params = {};
-    if (anio) params.anio = anio;
-    if (mes) params.mes = mes;
-    if (departamentoId) params.departamento_id = departamentoId;
-    
-    const response = await axiosInstance.get('/reportes/asistencias-mensuales', { params });
-    return response.data;
+    try {
+      const params = {};
+      if (anio) params.anio = anio;
+      if (mes) params.mes = mes;
+      if (departamentoId) params.departamento_id = departamentoId;
+      
+      const response = await axiosInstance.get('/reportes/asistencias-mensuales', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte mensual:', error);
+      throw error;
+    }
   },
   
   descargarAsistenciasMensualesCSV: async (anio, mes, departamentoId) => {
-    const params = {};
-    if (anio) params.anio = anio;
-    if (mes) params.mes = mes;
-    if (departamentoId) params.departamento_id = departamentoId;
-    
-    const response = await axiosInstance.get('/reportes/asistencias-mensuales-csv', { 
-      params,
-      responseType: 'blob'
-    });
-    
-    // Crear un enlace para descargar el archivo
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `asistencias_${anio}_${mes}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    try {
+      const params = {};
+      if (anio) params.anio = anio;
+      if (mes) params.mes = mes;
+      if (departamentoId) params.departamento_id = departamentoId;
+      
+      const response = await axiosInstance.get('/reportes/asistencias-mensuales-csv', { 
+        params,
+        responseType: 'blob'
+      });
+      
+      // Crear un enlace para descargar el archivo
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `asistencias_${anio}_${mes}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('❌ Error al descargar CSV:', error);
+      throw error;
+    }
   },
   
   getReporteRetardos: async (fechaInicio, fechaFin, departamentoId) => {
-    const params = {};
-    if (fechaInicio) params.fecha_inicio = fechaInicio;
-    if (fechaFin) params.fecha_fin = fechaFin;
-    if (departamentoId) params.departamento_id = departamentoId;
-    
-    const response = await axiosInstance.get('/reportes/retardos', { params });
-    return response.data;
+    try {
+      const params = {};
+      if (fechaInicio) params.fecha_inicio = fechaInicio;
+      if (fechaFin) params.fecha_fin = fechaFin;
+      if (departamentoId) params.departamento_id = departamentoId;
+      
+      const response = await axiosInstance.get('/reportes/retardos', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte de retardos:', error);
+      throw error;
+    }
   },
   
   getReporteFaltas: async (fechaInicio, fechaFin, departamentoId) => {
-    const params = {};
-    if (fechaInicio) params.fecha_inicio = fechaInicio;
-    if (fechaFin) params.fecha_fin = fechaFin;
-    if (departamentoId) params.departamento_id = departamentoId;
-    
-    const response = await axiosInstance.get('/reportes/faltas', { params });
-    return response.data;
+    try {
+      const params = {};
+      if (fechaInicio) params.fecha_inicio = fechaInicio;
+      if (fechaFin) params.fecha_fin = fechaFin;
+      if (departamentoId) params.departamento_id = departamentoId;
+      
+      const response = await axiosInstance.get('/reportes/faltas', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte de faltas:', error);
+      throw error;
+    }
   },
   
   getReporteJustificaciones: async (fechaInicio, fechaFin, departamentoId, idRegla) => {
-    const params = {};
-    if (fechaInicio) params.fecha_inicio = fechaInicio;
-    if (fechaFin) params.fecha_fin = fechaFin;
-    if (departamentoId) params.departamento_id = departamentoId;
-    if (idRegla) params.id_regla_justificacion = idRegla;
-    
-    const response = await axiosInstance.get('/reportes/justificaciones', { params });
-    return response.data;
+    try {
+      const params = {};
+      if (fechaInicio) params.fecha_inicio = fechaInicio;
+      if (fechaFin) params.fecha_fin = fechaFin;
+      if (departamentoId) params.departamento_id = departamentoId;
+      if (idRegla) params.id_regla_justificacion = idRegla;
+      
+      const response = await axiosInstance.get('/reportes/justificaciones', { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte de justificaciones:', error);
+      throw error;
+    }
   },
 };
 
 // Servicios para departamentos y otros catálogos
 const catalogoService = {
   getDepartamentos: async () => {
-    const response = await axiosInstance.get('/departamentos');
-    return response.data;
+    try {
+      console.log('📤 Solicitando departamentos...');
+      const response = await axiosInstance.get('/departamentos');
+      console.log('📥 Departamentos obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener departamentos:', error);
+      throw error;
+    }
   },
   
   getTiposTrabajador: async () => {
-    const response = await axiosInstance.get('/tipos-trabajador');
-    return response.data;
+    try {
+      console.log('📤 Solicitando tipos de trabajador...');
+      const response = await axiosInstance.get('/tipos-trabajador');
+      console.log('📥 Tipos de trabajador obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener tipos de trabajador:', error);
+      throw error;
+    }
   },
   
   getGradosEstudio: async () => {
-    const response = await axiosInstance.get('/grados-estudio');
-    return response.data;
+    try {
+      console.log('📤 Solicitando grados de estudio...');
+      const response = await axiosInstance.get('/grados-estudio');
+      console.log('📥 Grados de estudio obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener grados de estudio:', error);
+      throw error;
+    }
   },
   
   getRolesUsuario: async () => {
-    const response = await axiosInstance.get('/roles-usuario');
-    return response.data;
+    try {
+      console.log('📤 Solicitando roles de usuario...');
+      const response = await axiosInstance.get('/roles-usuario');
+      console.log('📥 Roles de usuario obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener roles de usuario:', error);
+      throw error;
+    }
   },
   
   getReglasRetardo: async () => {
-    const response = await axiosInstance.get('/reglas-retardo');
-    return response.data;
+    try {
+      const response = await axiosInstance.get('/reglas-retardo');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reglas de retardo:', error);
+      throw error;
+    }
   },
   
   getCentrosTrabajo: async () => {
-    const response = await axiosInstance.get('/centros-trabajo');
-    return response.data;
+    try {
+      console.log('📤 Solicitando centros de trabajo...');
+      const response = await axiosInstance.get('/centros-trabajo');
+      console.log('📥 Centros de trabajo obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener centros de trabajo:', error);
+      throw error;
+    }
   },
 
   // Utilizar el servicio de horarios para catálogos
   getHorarios: async () => {
-    const response = await axiosInstance.get('/horarios');
-    return response.data;
+    try {
+      console.log('📤 Solicitando horarios para catálogo...');
+      const response = await axiosInstance.get('/horarios');
+      console.log('📥 Horarios para catálogo obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener horarios para catálogo:', error);
+      throw error;
+    }
   },
 
   // Crear nuevos catálogos
   createDepartamento: async (departamento) => {
-    const response = await axiosInstance.post('/departamentos', departamento);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/departamentos', departamento);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear departamento:', error);
+      throw error;
+    }
   },
   
   createTipoTrabajador: async (tipo) => {
-    const response = await axiosInstance.post('/tipos-trabajador', tipo);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/tipos-trabajador', tipo);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear tipo de trabajador:', error);
+      throw error;
+    }
   },
   
   createGradoEstudio: async (grado) => {
-    const response = await axiosInstance.post('/grados-estudio', grado);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/grados-estudio', grado);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear grado de estudio:', error);
+      throw error;
+    }
   },
   
   createRolUsuario: async (rol) => {
-    const response = await axiosInstance.post('/roles-usuario', rol);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/roles-usuario', rol);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear rol de usuario:', error);
+      throw error;
+    }
   },
   
   createCentroTrabajo: async (centro) => {
-    const response = await axiosInstance.post('/centros-trabajo', centro);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/centros-trabajo', centro);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear centro de trabajo:', error);
+      throw error;
+    }
   },
 };
 
@@ -549,6 +858,174 @@ const horarioUtils = {
   }
 };
 
+// Función de prueba de conectividad
+const testApiConnectivity = async () => {
+  try {
+    console.log('🔍 Probando conectividad con la API...');
+    console.log('🔗 URL base:', axiosInstance.defaults.baseURL);
+    
+    // Probar endpoint básico
+    const response = await axiosInstance.get('/trabajadores?limit=1');
+    console.log('✅ API responde correctamente');
+    console.log('📊 Status:', response.status);
+    console.log('📦 Data type:', typeof response.data);
+    console.log('📋 Es array:', Array.isArray(response.data));
+    
+    return {
+      status: 'ok',
+      message: 'API funcionando correctamente',
+      data: response.data
+    };
+    
+  } catch (error) {
+    console.error('❌ Error de conectividad:', error.message);
+    console.error('🔗 URL intentada:', error.config?.url);
+    console.error('📊 Status code:', error.response?.status);
+    
+    return {
+      status: 'error',
+      message: error.message,
+      details: {
+        url: error.config?.url,
+        status: error.response?.status,
+        data: error.response?.data
+      }
+    };
+  }
+};
+
+// Función de debug general
+const debugApiState = () => {
+  console.log('🔍 =================================');
+  console.log('🔍 DEBUG API STATE');
+  console.log('🔍 =================================');
+  console.log('🔗 Base URL:', axiosInstance.defaults.baseURL);
+  console.log('🔑 Token exists:', !!localStorage.getItem('token'));
+  console.log('👤 User data:', localStorage.getItem('user'));
+  console.log('🌐 Environment:', process.env.NODE_ENV);
+  console.log('🎯 API URL from env:', process.env.REACT_APP_API_URL);
+  console.log('🔍 =================================');
+  
+  // Probar conectividad
+  return testApiConnectivity();
+};
+
+// Función para limpiar caché y recargar
+const clearCacheAndReload = () => {
+  console.log('🧹 Limpiando caché y recargando...');
+  
+  // Limpiar localStorage
+  const token = localStorage.getItem('token');
+  const user = localStorage.getItem('user');
+  localStorage.clear();
+  
+  // Restaurar datos de sesión si existen
+  if (token) localStorage.setItem('token', token);
+  if (user) localStorage.setItem('user', user);
+  
+  // Recargar página
+  window.location.reload();
+};
+
+// Función para verificar el estado del servidor
+const checkServerHealth = async () => {
+  try {
+    console.log('🏥 Verificando salud del servidor...');
+    
+    const healthChecks = [
+      { name: 'Trabajadores', endpoint: '/trabajadores?limit=1' },
+      { name: 'Asistencias Hoy', endpoint: '/asistencias/hoy' },
+      { name: 'Departamentos', endpoint: '/departamentos' },
+      { name: 'Horarios', endpoint: '/horarios?limit=1' }
+    ];
+    
+    const results = [];
+    
+    for (const check of healthChecks) {
+      try {
+        const start = Date.now();
+        const response = await axiosInstance.get(check.endpoint);
+        const duration = Date.now() - start;
+        
+        results.push({
+          name: check.name,
+          status: 'ok',
+          responseTime: duration,
+          dataType: typeof response.data,
+          dataLength: Array.isArray(response.data) ? response.data.length : 'N/A'
+        });
+        
+        console.log(`✅ ${check.name}: OK (${duration}ms)`);
+        
+      } catch (error) {
+        results.push({
+          name: check.name,
+          status: 'error',
+          error: error.message,
+          statusCode: error.response?.status
+        });
+        
+        console.log(`❌ ${check.name}: Error - ${error.message}`);
+      }
+    }
+    
+    console.log('🏥 Resumen de verificación:', results);
+    return results;
+    
+  } catch (error) {
+    console.error('❌ Error en verificación de salud:', error);
+    return [];
+  }
+};
+
+// Función para reinicializar la instancia de axios
+const reinitializeAxios = () => {
+  console.log('🔄 Reinicializando instancia de axios...');
+  
+  // Configurar nuevamente los interceptors
+  axiosInstance.interceptors.request.clear();
+  axiosInstance.interceptors.response.clear();
+  
+  // Request interceptor
+  axiosInstance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      console.log('📤 Request:', config.method?.toUpperCase(), config.url);
+      return config;
+    },
+    (error) => {
+      console.error('❌ Request error:', error);
+      return Promise.reject(error);
+    }
+  );
+  
+  // Response interceptor
+  axiosInstance.interceptors.response.use(
+    (response) => {
+      console.log('📥 Response:', response.status, response.config.url);
+      return response;
+    },
+    (error) => {
+      console.error('❌ Response error:', error.response?.status, error.config?.url);
+      
+      // Manejar errores de autenticación
+      if (error.response && error.response.status === 401) {
+        console.log('🚪 Token expirado, redirigiendo al login...');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
+      
+      return Promise.reject(error);
+    }
+  );
+  
+  console.log('✅ Axios reinicializado correctamente');
+};
+
 export {
   authService,
   trabajadorService,
@@ -558,4 +1035,10 @@ export {
   reporteService,
   catalogoService,
   horarioUtils,
-}; 
+  testApiConnectivity,
+  debugApiState,
+  clearCacheAndReload,
+  checkServerHealth,
+  reinitializeAxios,
+  axiosInstance
+};

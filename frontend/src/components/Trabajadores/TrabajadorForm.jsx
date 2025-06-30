@@ -585,6 +585,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Tipo de Trabajador"
+                        sx={{minWidth: 150}}
                       >
                         {tiposTrabajador.map((tipo) => (
                           <MenuItem key={tipo.id} value={tipo.id.toString()}>
@@ -607,6 +608,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Departamento"
+                        sx={{minWidth: 150}}
                       >
                         {departamentos.map((depto) => (
                           <MenuItem key={depto.id} value={depto.id.toString()}>
@@ -643,6 +645,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Horario"
+                        sx={{minWidth: 150}}
                       >
                         {horarios.map((horario) => (
                           <MenuItem key={horario.id} value={horario.id.toString()}>
@@ -685,6 +688,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Centro de Trabajo"
+                         sx={{minWidth: 150}}
                       >
                         {centrosTrabajo.map((centro) => (
                           <MenuItem key={centro.id} value={centro.id.toString()}>
@@ -788,6 +792,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Grado de Estudios"
+                         sx={{minWidth: 150}}
                       >
                         {gradosEstudio.map((grado) => (
                           <MenuItem key={grado.id} value={grado.id.toString()}>
@@ -883,6 +888,7 @@ const TrabajadorForm = () => {
                         onChange={handleChange}
                         onBlur={handleBlur}
                         label="Rol en el sistema"
+                         sx={{minWidth: 150}}
                       >
                         {roles.map((rol) => (
                           <MenuItem key={rol.id} value={rol.id.toString()}>

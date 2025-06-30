@@ -1,10 +1,9 @@
 from sqlalchemy import BLOB, Column, Integer, String, DateTime, ForeignKey, Time, Boolean
 from sqlalchemy.orm import relationship
-from app.database import Base
 from sqlalchemy import LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
-Base = declarative_base()
 
+Base = declarative_base()
 
 class Trabajador(Base):
     __tablename__ = "trabajadores"
@@ -15,7 +14,7 @@ class Trabajador(Base):
     nombre = Column(String(100), nullable=False)
     id_tipo = Column(Integer, ForeignKey("tipoTrabajador.id"))
     departamento = Column(Integer, ForeignKey("departamentos.id"))
-    rfc= Column(String(13), nullable=False)
+    rfc = Column(String(13), nullable=False)
     curp = Column(String(18), nullable=False)
     fechaIngresoSep = Column(DateTime, nullable=False)
     fechaIngresoRama = Column(DateTime, nullable=False)
@@ -51,7 +50,6 @@ class TipoTrabajador(Base):
     # Relación inversa
     trabajadores = relationship("Trabajador", back_populates="tipo_trabajador")
 
-
 class Departamento(Base):
     __tablename__ = "departamentos"
 
@@ -60,8 +58,6 @@ class Departamento(Base):
     
     # Relación inversa
     trabajadores = relationship("Trabajador", back_populates="departamento_rel")
-
-
 
 class Horario(Base):
     __tablename__ = "horarios"
@@ -81,16 +77,15 @@ class Horario(Base):
     
     # Relación inversa
     trabajadores = relationship("Trabajador", back_populates="horario_rel")
-    
 
 class CentroTrabajo(Base):
     __tablename__ = "centroTrabajo"
 
     id = Column(Integer, primary_key=True, index=True)
     claveCT = Column(String(100), nullable=False)
-    entidadFederativa = Column(String(100),nullable=False)
-    ubicacion = Column(String(100),nullable=False)
-    nivel = Column(String(100),nullable=False)
+    entidadFederativa = Column(String(100), nullable=False)
+    ubicacion = Column(String(100), nullable=False)
+    nivel = Column(String(100), nullable=False)
     plantel = Column(String(100), nullable=False)
     logo = Column(LargeBinary, nullable=False)
     
@@ -105,14 +100,18 @@ class AsignacionHorario(Base):
     id_horario = Column(Integer, ForeignKey("horarios.id"))
     fehcaInicio = Column(DateTime, nullable=False)  
 
-
+# MODELO CORREGIDO PARA REGISTRO DE ASISTENCIA - USANDO id_trabajador
 class RegistroAsistencia(Base):
     __tablename__ = "registroAsistencia"
 
     id = Column(Integer, primary_key=True, index=True)
-    id_empleado = Column(Integer, ForeignKey("trabajadores.id"))
+    # CORREGIDO: Usar id_trabajador que es como está en la base de datos
+    id_trabajador = Column(Integer, ForeignKey("trabajadores.id"), nullable=False)
     fecha = Column(DateTime, nullable=False)
     estatus = Column(String(50), nullable=False)
+    
+    # Relación con trabajador (opcional, para facilitar consultas)
+    trabajador = relationship("Trabajador", backref="asistencias")
 
 class GradoEstudio(Base):
     __tablename__ = "gradosEstudio"
@@ -127,7 +126,8 @@ class Justificacion(Base):
     __tablename__ = "justificaciones"
 
     id = Column(Integer, primary_key=True, index=True)
-    id_empleado = Column(Integer, ForeignKey("trabajadores.id"))
+    # CORREGIDO: Usar id_trabajador consistentemente
+    id_trabajador = Column(Integer, ForeignKey("trabajadores.id"))
     fecha = Column(DateTime, nullable=False)
     id_descripcion = Column(Integer, ForeignKey("reglasJustificaciones.id"))
 

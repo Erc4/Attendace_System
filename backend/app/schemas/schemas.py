@@ -237,18 +237,18 @@ class AsignacionHorarioOut(BaseModel):
 
 # Schemas para Registro de Asistencia
 class RegistroAsistenciaCreate(BaseModel):
-    id_empleado: int
+    id_trabajador: int
     fecha: datetime
     estatus: str
 
 class RegistroAsistenciaUpdate(BaseModel):
-    id_empleado: Optional[int] = None
+    id_trabajador: Optional[int] = None
     fecha: Optional[datetime] = None
     estatus: Optional[str] = None
 
 class RegistroAsistenciaOut(BaseModel):
     id: int
-    id_empleado: int
+    id_trabajador: int
     fecha: datetime
     estatus: str
     
@@ -257,18 +257,18 @@ class RegistroAsistenciaOut(BaseModel):
 
 # Schemas para Justificaciones
 class JustificacionCreate(BaseModel):
-    id_empleado: int
+    id_trabajador: int
     fecha: datetime
     id_descripcion: int
 
 class JustificacionUpdate(BaseModel):
-    id_empleado: Optional[int] = None
+    id_trabajador: Optional[int] = None
     fecha: Optional[datetime] = None
     id_descripcion: Optional[int] = None
 
 class JustificacionOut(BaseModel):
     id: int
-    id_empleado: int
+    id_trabajador: int
     fecha: datetime
     id_descripcion: int
     

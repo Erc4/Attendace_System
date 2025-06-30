@@ -256,16 +256,6 @@ const TrabajadorDetail = () => {
               {trabajador.puesto} - {getDepartamentoName()}
             </Typography>
           </Grid>
-          <Grid item>
-            <Button
-              variant="contained"
-              startIcon={<EditIcon />}
-              component={RouterLink}
-              to={`/trabajadores/${id}/editar`}
-            >
-              Editar
-            </Button>
-          </Grid>
         </Grid>
       </Box>
       

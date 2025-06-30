@@ -20,7 +20,14 @@ import TrabajadorDetail from './components/Trabajadores/TrabajadorDetail';
 import HorariosList from './components/Horarios/HorariosList';
 import HorarioForm from './components/Horarios/HorarioForm';
 import HorarioDetail from './components/Horarios/HorarioDetail';
-import TrabajadoresSinHorario from './components/Horarios/TrabajadoresSinHorario.jsx';
+import TrabajadoresSinHorario from './components/Horarios/TrabajadoresSinHorario';
+
+// Componentes de Asistencias
+import RegistroAsistenciaManual from './components/Asistencias/RegistroAsistenciaManual';
+import AsistenciasList from './components/Asistencias/AsistenciasList';
+import ReportesAsistencia from './components/Asistencias/ReportesAsistencia';
+
+
 
 // Página no encontrada
 import NotFound from './pages/NotFound';
@@ -70,12 +77,46 @@ const AppRoutes = () => {
         } 
       />
       
+      {/* Rutas de Asistencias */}
+      <Route 
+        path="/asistencias" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <AsistenciasList />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/asistencias/registro" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <RegistroAsistenciaManual />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
       <Route 
         path="/asistencias/registrar" 
         element={
           <ProtectedRoute>
             <Layout>
               <RegistroAsistencia />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/asistencias/reportes" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
@@ -206,13 +247,24 @@ const AppRoutes = () => {
         } 
       />
       
-      {/* Reportes */}
+      {/* Reportes - RUTAS ACTUALIZADAS */}
+      <Route 
+        path="/reportes" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ReportesAsistencia />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+      
       <Route 
         path="/reportes/asistencias-diarias" 
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Reporte de Asistencias Diarias (por implementar)</div>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
@@ -223,7 +275,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Reporte de Asistencias Mensuales (por implementar)</div>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
@@ -234,7 +286,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Reporte de Retardos (por implementar)</div>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
@@ -245,7 +297,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Reporte de Faltas (por implementar)</div>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
@@ -256,7 +308,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Reporte de Justificaciones (por implementar)</div>
+              <ReportesAsistencia />
             </Layout>
           </ProtectedRoute>
         } 
