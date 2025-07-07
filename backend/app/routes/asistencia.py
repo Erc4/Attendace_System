@@ -23,8 +23,9 @@ from app.services.auth_service import get_current_trabajador, check_admin_permis
 
 router = APIRouter()
 
-# CONFIGURACIÓN DE ZONA HORARIA
-TIMEZONE_MEXICO = pytz.timezone('America/Mexico_City')
+# CONFIGURACIÓN DE ZONA HORARIA - Los Mochis, Sinaloa
+# Los Mochis está en la zona horaria de Montaña (MST/MDT)
+TIMEZONE_MEXICO = pytz.timezone('America/Mazatlan')
 
 def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: datetime, db: Session) -> str:
     """
@@ -206,125 +207,60 @@ def get_asistencias_hoy(
             resultado.append({
                 "id": trabajador.id,
                 "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+                "rfc": trabajador.rfc,
                 "departamento": departamento.descripcion,
-                "puesto": trabajador.puesto,
-                "estatus": asistencia.estatus,
-                "hora_registro": asistencia.fecha
+                "hora_registro": asistencia.fecha,
+                "estatus": asistencia.estatus
             })
         else:
             # Trabajador sin asistencia registrada
             resultado.append({
                 "id": trabajador.id,
                 "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+                "rfc": trabajador.rfc,
                 "departamento": departamento.descripcion,
-                "puesto": trabajador.puesto,
-                "estatus": "NO_REGISTRADO",
-                "hora_registro": None
+                "hora_registro": None,
+                "estatus": "NO_REGISTRADO"
             })
     
-    # Calcular estadísticas generales
-    total_trabajadores = len(trabajadores)
-    asistencias_count = sum(1 for r in resultado if r["estatus"] == "ASISTENCIA")
-    retardos_count = sum(1 for r in resultado if "RETARDO" in r["estatus"])
-    faltas_count = sum(1 for r in resultado if r["estatus"] == "FALTA")
-    no_registrados = sum(1 for r in resultado if r["estatus"] == "NO_REGISTRADO")
+    # Calcular estadísticas
+    estadisticas = {
+        "total_trabajadores": len(trabajadores),
+        "asistencias": sum(1 for r in resultado if r["estatus"] == "ASISTENCIA"),
+        "retardos": sum(1 for r in resultado if "RETARDO" in r["estatus"]),
+        "faltas": sum(1 for r in resultado if r["estatus"] == "FALTA"),
+        "no_registrados": sum(1 for r in resultado if r["estatus"] == "NO_REGISTRADO")
+    }
     
-    print(f"Estadísticas calculadas:")
-    print(f"  - Total trabajadores: {total_trabajadores}")
-    print(f"  - Asistencias: {asistencias_count}")
-    print(f"  - Retardos: {retardos_count}")
-    print(f"  - Faltas: {faltas_count}")
-    print(f"  - No registrados: {no_registrados}")
+    print(f"Estadísticas calculadas: {estadisticas}")
     
     return {
         "fecha": ahora_mexico.date(),
-        "estadisticas": {
-            "total_trabajadores": total_trabajadores,
-            "asistencias": asistencias_count,
-            "retardos": retardos_count,
-            "faltas": faltas_count,
-            "no_registrados": no_registrados,
-            "porcentaje_asistencia": (asistencias_count / total_trabajadores) * 100 if total_trabajadores > 0 else 0
-        },
-        "registros": resultado
+        "registros": resultado,
+        "estadisticas": estadisticas
     }
 
-@router.get("/asistencias/trabajador/{trabajador_id}")
-def get_asistencias_by_trabajador(
-    trabajador_id: int,
-    fecha_inicio: Optional[date] = None,
-    fecha_fin: Optional[date] = None,
+# ===== RUTAS CRUD BÁSICAS =====
+
+@router.post("/asistencias", response_model=RegistroAsistenciaOut)
+def create_asistencia(
+    asistencia: RegistroAsistenciaCreate,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    """
-    Esta ruta también es específica y debe ir antes de /asistencias/{asistencia_id}
-    """
-    # Verificar si el trabajador existe
-    trabajador = db.query(Trabajador).filter(Trabajador.id == trabajador_id).first()
+    """Crear un nuevo registro de asistencia manual"""
+    print(f"=== CREANDO REGISTRO DE ASISTENCIA MANUAL ===")
+    print(f"Datos recibidos: {asistencia.dict()}")
+    
+    # Verificar que el trabajador existe
+    trabajador = db.query(Trabajador).filter(
+        Trabajador.id == asistencia.id_trabajador
+    ).first()
+    
     if not trabajador:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Trabajador con ID {trabajador_id} no encontrado"
-        )
-    
-    # Configurar fechas por defecto si no se proporcionan
-    if not fecha_inicio:
-        fecha_inicio = date.today() - timedelta(days=30)  # Últimos 30 días por defecto
-    
-    if not fecha_fin:
-        fecha_fin = date.today()
-    
-    # Consultar asistencias
-    asistencias = db.query(RegistroAsistencia).filter(
-        RegistroAsistencia.id_trabajador == trabajador_id,
-        RegistroAsistencia.fecha >= datetime.combine(fecha_inicio, time.min),
-        RegistroAsistencia.fecha <= datetime.combine(fecha_fin, time.max)
-    ).all()
-    
-    # Calcular estadísticas
-    total_dias = (fecha_fin - fecha_inicio).days + 1
-    asistencias_count = sum(1 for a in asistencias if a.estatus == "ASISTENCIA")
-    retardos_count = sum(1 for a in asistencias if "RETARDO" in a.estatus)
-    faltas_count = sum(1 for a in asistencias if a.estatus == "FALTA")
-    
-    return {
-        "trabajador": {
-            "id": trabajador.id,
-            "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
-            "rfc": trabajador.rfc
-        },
-        "periodo": {
-            "fecha_inicio": fecha_inicio,
-            "fecha_fin": fecha_fin,
-            "total_dias": total_dias
-        },
-        "estadisticas": {
-            "asistencias": asistencias_count,
-            "retardos": retardos_count,
-            "faltas": faltas_count,
-            "porcentaje_asistencia": (asistencias_count / total_dias) * 100 if total_dias > 0 else 0
-        },
-        "registros": asistencias
-    }
-
-# ===== RUTAS CRUD BÁSICAS (VAN DESPUÉS DE LAS ESPECÍFICAS) =====
-
-@router.post("/asistencias", response_model=RegistroAsistenciaOut, status_code=status.HTTP_201_CREATED)
-def create_asistencia(
-    asistencia: RegistroAsistenciaCreate, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(check_admin_permissions)
-):
-    print(f"=== CREANDO REGISTRO DE ASISTENCIA CORREGIDO ===")
-    print(f"Datos recibidos: {asistencia.dict()}")
-    
-    # Verificar si el trabajador existe
-    trabajador = db.query(Trabajador).filter(Trabajador.id == asistencia.id_trabajador).first()
-    if not trabajador:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Trabajador con ID {asistencia.id_trabajador} no existe"
+            detail=f"Trabajador con ID {asistencia.id_trabajador} no encontrado"
         )
     
     print(f"Trabajador encontrado: {trabajador.nombre} {trabajador.apellidoPaterno}")
@@ -342,12 +278,12 @@ def create_asistencia(
                 # UTC format
                 fecha_dt = datetime.fromisoformat(fecha_recibida.replace('Z', '+00:00'))
                 fecha_local = fecha_dt.astimezone(TIMEZONE_MEXICO)
-            elif '+' in fecha_recibida or fecha_recibida.endswith('00'):
-                # Timezone aware format
+            elif '+' in fecha_recibida or '-' in fecha_recibida[-6:]:
+                # Timezone aware format con offset (e.g., 2025-01-07T10:30:00-07:00)
                 fecha_dt = datetime.fromisoformat(fecha_recibida)
                 fecha_local = fecha_dt.astimezone(TIMEZONE_MEXICO)
             else:
-                # Naive format - asumir que está en hora local
+                # Naive format - asumir que está en hora local de México
                 fecha_dt = datetime.fromisoformat(fecha_recibida)
                 fecha_local = TIMEZONE_MEXICO.localize(fecha_dt)
         else:
@@ -359,7 +295,7 @@ def create_asistencia(
         
         print(f"Fecha procesada (México): {fecha_local}")
         
-        # Para guardar en BD, usar naive datetime
+        # Para guardar en BD, usar naive datetime en hora local
         fecha_para_bd = fecha_local.replace(tzinfo=None)
         print(f"Fecha para base de datos: {fecha_para_bd}")
         
@@ -380,54 +316,51 @@ def create_asistencia(
         estatus_calculado = "ASISTENCIA"
         print(f"Usando estatus por defecto: {estatus_calculado}")
     
-    # Crear el registro de asistencia con el estatus calculado y fecha corregida
-    try:
-        db_asistencia = RegistroAsistencia(
-            id_trabajador=asistencia.id_trabajador,
-            fecha=fecha_para_bd,  # Usar la fecha procesada correctamente
-            estatus=estatus_calculado  # Usar el estatus calculado
-        )
-        
-        db.add(db_asistencia)
-        db.commit()
-        db.refresh(db_asistencia)
-        
-        print(f"✅ Asistencia creada con ID: {db_asistencia.id}")
-        print(f"✅ Fecha guardada: {db_asistencia.fecha}")
-        print(f"✅ Estatus asignado: {db_asistencia.estatus}")
-        
-        return db_asistencia
-        
-    except Exception as e:
-        print(f"❌ Error al guardar en base de datos: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al guardar la asistencia: {str(e)}"
-        )
+    # Crear el registro de asistencia con el estatus calculado
+    db_asistencia = RegistroAsistencia(
+        id_trabajador=asistencia.id_trabajador,
+        fecha=fecha_para_bd,  # Usar fecha procesada
+        estatus=estatus_calculado  # Usar estatus calculado
+    )
+    
+    db.add(db_asistencia)
+    db.commit()
+    db.refresh(db_asistencia)
+    
+    print(f"✅ Asistencia registrada con ID: {db_asistencia.id}")
+    print(f"   Fecha guardada: {db_asistencia.fecha}")
+    print(f"   Estatus: {db_asistencia.estatus}")
+    
+    return db_asistencia
 
 @router.get("/asistencias", response_model=List[RegistroAsistenciaOut])
-def get_asistencias(
-    skip: int = 0, 
+def list_asistencias(
+    skip: int = 0,
     limit: int = 100,
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
-    id_trabajador: Optional[int] = None,
+    trabajador_id: Optional[int] = None,
+    departamento_id: Optional[int] = None,
     estatus: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
     query = db.query(RegistroAsistencia)
     
-    # Aplicar filtros si se proporcionan
-    if fecha_inicio:
-        query = query.filter(RegistroAsistencia.fecha >= datetime.combine(fecha_inicio, time.min))
+    # Aplicar filtros
+    if fecha_inicio and fecha_fin:
+        fecha_inicio_dt = datetime.combine(fecha_inicio, time.min)
+        fecha_fin_dt = datetime.combine(fecha_fin, time.max)
+        query = query.filter(
+            RegistroAsistencia.fecha >= fecha_inicio_dt,
+            RegistroAsistencia.fecha <= fecha_fin_dt
+        )
     
-    if fecha_fin:
-        query = query.filter(RegistroAsistencia.fecha <= datetime.combine(fecha_fin, time.max))
+    if trabajador_id:
+        query = query.filter(RegistroAsistencia.id_trabajador == trabajador_id)
     
-    if id_trabajador:
-        query = query.filter(RegistroAsistencia.id_trabajador == id_trabajador)
+    if departamento_id:
+        query = query.join(Trabajador).filter(Trabajador.departamento == departamento_id)
     
     if estatus:
         query = query.filter(RegistroAsistencia.estatus == estatus)
@@ -435,15 +368,11 @@ def get_asistencias(
     return query.offset(skip).limit(limit).all()
 
 @router.get("/asistencias/{asistencia_id}", response_model=RegistroAsistenciaOut)
-def get_asistencia_by_id(
-    asistencia_id: int, 
+def get_asistencia(
+    asistencia_id: int,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    """
-    IMPORTANTE: Esta ruta va DESPUÉS de las rutas específicas
-    para evitar conflictos de parseo
-    """
     asistencia = db.query(RegistroAsistencia).filter(RegistroAsistencia.id == asistencia_id).first()
     if not asistencia:
         raise HTTPException(
@@ -515,31 +444,41 @@ def delete_asistencia(
 
 # ===== RUTAS PARA REGLAS DE RETARDO =====
 
-@router.post("/reglas-retardo", response_model=ReglaRetardoOut, status_code=status.HTTP_201_CREATED)
+@router.get("/reglas-retardo", response_model=List[ReglaRetardoOut])
+def list_reglas_retardo(
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    return db.query(ReglaRetardo).order_by(ReglaRetardo.minutosMin).all()
+
+@router.post("/reglas-retardo", response_model=ReglaRetardoOut)
 def create_regla_retardo(
-    regla: ReglaRetardoCreate, 
+    regla: ReglaRetardoCreate,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
+    # Verificar que no haya conflicto con otras reglas
+    conflicto = db.query(ReglaRetardo).filter(
+        ((ReglaRetardo.minutosMin <= regla.minutosMin) & (ReglaRetardo.minutosMax >= regla.minutosMin)) |
+        ((ReglaRetardo.minutosMin <= regla.minutosMax) & (ReglaRetardo.minutosMax >= regla.minutosMax))
+    ).first()
+    
+    if conflicto:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La regla se traslapa con una regla existente"
+        )
+    
     db_regla = ReglaRetardo(**regla.dict())
     db.add(db_regla)
     db.commit()
     db.refresh(db_regla)
     return db_regla
 
-@router.get("/reglas-retardo", response_model=List[ReglaRetardoOut])
-def get_reglas_retardo(
-    skip: int = 0, 
-    limit: int = 100, 
-    db: Session = Depends(get_db),
-    current_user: Trabajador = Depends(get_current_trabajador)
-):
-    return db.query(ReglaRetardo).offset(skip).limit(limit).all()
-
 @router.put("/reglas-retardo/{regla_id}", response_model=ReglaRetardoOut)
 def update_regla_retardo(
-    regla_id: int, 
-    regla_update: ReglaRetardoUpdate, 
+    regla_id: int,
+    regla_update: ReglaRetardoUpdate,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
@@ -550,18 +489,7 @@ def update_regla_retardo(
             detail=f"Regla de retardo con ID {regla_id} no encontrada"
         )
     
-    db.delete(db_regla)
-    db.commit()
-    return Nonefirst()
-    if not db_regla:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Regla de retardo con ID {regla_id} no encontrada"
-        )
-    
-    # Actualizar campos si están presentes en la solicitud
     update_data = regla_update.dict(exclude_unset=True)
-    
     for key, value in update_data.items():
         setattr(db_regla, key, value)
     
@@ -571,7 +499,7 @@ def update_regla_retardo(
 
 @router.delete("/reglas-retardo/{regla_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_regla_retardo(
-    regla_id: int, 
+    regla_id: int,
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
@@ -580,7 +508,8 @@ def delete_regla_retardo(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Regla de retardo con ID {regla_id} no encontrada"
-        )   
+        )
+    
     db.delete(db_regla)
     db.commit()
     return None

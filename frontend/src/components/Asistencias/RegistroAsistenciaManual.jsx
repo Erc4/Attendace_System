@@ -52,16 +52,16 @@ import timezone from 'dayjs/plugin/timezone';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/es';
 
+import { asistenciaService, trabajadorService, horarioService } from '../../services/api';
+
 // IMPORTANTE: Configurar dayjs para manejar zonas horarias
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(customParseFormat);
 dayjs.locale('es');
 
-// Configurar la zona horaria local (México)
-const TIMEZONE_LOCAL = 'America/Mexico_City';
-
-import { asistenciaService, trabajadorService, horarioService } from '../../services/api';
+// Configurar la zona horaria local - Los Mochis, Sinaloa (MST/MDT)
+const TIMEZONE_LOCAL = 'America/Mazatlan';
 
 const RegistroAsistenciaManual = () => {
   const navigate = useNavigate();
@@ -98,51 +98,73 @@ const RegistroAsistenciaManual = () => {
       setLoading(true);
       console.log('🔄 Cargando datos de asistencias y trabajadores...');
       
+      // Primero, intentar cargar trabajadores de forma independiente para debug
+      try {
+        console.log('📡 Intentando cargar trabajadores...');
+        const trabajadoresTest = await trabajadorService.getAll({ estado: true });
+        console.log('📊 Respuesta trabajadores (test):', trabajadoresTest);
+      } catch (testError) {
+        console.error('❌ Error en prueba de trabajadores:', testError);
+      }
+      
       // Cargar trabajadores y asistencias en paralelo
       const [trabajadoresResponse, asistenciasResponse] = await Promise.all([
         trabajadorService.getAll({ estado: true }),
         asistenciaService.getAsistenciasHoy()
       ]);
       
-      console.log('👥 Trabajadores cargados:', trabajadoresResponse);
-      console.log('📊 Respuesta de asistencias:', asistenciasResponse);
+      console.log('✅ Respuesta trabajadores completa:', trabajadoresResponse);
+      console.log('✅ Tipo de respuesta trabajadores:', typeof trabajadoresResponse);
+      console.log('✅ Es array?:', Array.isArray(trabajadoresResponse));
+      console.log('✅ Trabajadores cargados:', trabajadoresResponse?.length || 0);
+      console.log('✅ Asistencias de hoy:', asistenciasResponse.registros?.length || 0);
       
-      // Validar estructura de datos
-      if (!Array.isArray(trabajadoresResponse)) {
-        throw new Error('Los datos de trabajadores no son un array válido');
-      }
+      // La respuesta puede venir como array directo o como objeto con propiedad trabajadores
+      const trabajadoresArray = Array.isArray(trabajadoresResponse) 
+        ? trabajadoresResponse 
+        : (trabajadoresResponse?.trabajadores || []);
       
-      if (!asistenciasResponse || typeof asistenciasResponse !== 'object') {
-        throw new Error('Los datos de asistencias no tienen formato válido');
-      }
+      console.log('📋 Array final de trabajadores:', trabajadoresArray);
+      console.log('📋 Cantidad de trabajadores:', trabajadoresArray.length);
       
-      // Actualizar estados
-      setTrabajadores(trabajadoresResponse);
+      setTrabajadores(trabajadoresArray);
       setAsistenciasHoy(asistenciasResponse.registros || []);
       setEstadisticas(asistenciasResponse.estadisticas || {
-        total_trabajadores: trabajadoresResponse.length,
+        total_trabajadores: 0,
         asistencias: 0,
         retardos: 0,
         faltas: 0,
-        no_registrados: trabajadoresResponse.length
+        no_registrados: 0
       });
-      
-      setError(null);
-      console.log('✅ Datos cargados exitosamente');
       
     } catch (err) {
       console.error('❌ Error al cargar datos:', err);
-      console.error('❌ Detalles del error:', err.response?.data);
-      console.error('❌ Stack:', err.stack);
+      console.error('❌ Stack trace:', err.stack);
       
-      let errorMessage = 'Error al cargar datos: ';
+      // Manejar diferentes tipos de error
+      let errorMessage = 'Error al cargar los datos. ';
       
       if (err.response) {
         // Error del servidor
-        errorMessage += `${err.response.status} - ${err.response.data?.detail || err.response.statusText}`;
+        console.error('❌ Response status:', err.response.status);
+        console.error('❌ Response data:', err.response.data);
+        console.error('❌ Response headers:', err.response.headers);
+        
+        if (err.response.status === 404) {
+          errorMessage += 'Servicio no encontrado. Verifica la conexión con el backend.';
+        } else if (err.response.status === 401) {
+          errorMessage += 'No autorizado. Por favor inicia sesión nuevamente.';
+          navigate('/login');
+          return;
+        } else if (err.response.status === 500) {
+          errorMessage += `Error del servidor: ${err.response.data?.detail || 'Error interno'}`;
+        } else {
+          errorMessage += err.response.data?.detail || 'Error del servidor.';
+        }
       } else if (err.request) {
-        // Error de conexión
-        errorMessage += 'No se pudo conectar con el servidor. Verifica que el backend esté funcionando.';
+        // Sin respuesta del servidor
+        console.error('❌ Request:', err.request);
+        errorMessage += 'No se pudo conectar con el servidor. Verifica que el backend esté funcionando en http://localhost:8000';
       } else {
         // Error de configuración
         errorMessage += err.message;
@@ -208,45 +230,47 @@ const RegistroAsistenciaManual = () => {
       // PASO 1: Combinar fecha y hora correctamente
       const fechaHoraCompleta = combinarFechaHora(fechaSeleccionada, horaRegistro);
       
-      // PASO 2: Preparar datos para envío - USAR LOCAL TIME, NO UTC
+      // PASO 2: Preparar datos para envío - ENVIAR CON OFFSET DE ZONA HORARIA
       const asistenciaData = {
         id_trabajador: selectedTrabajador.id,
-        fecha: fechaHoraCompleta.format('YYYY-MM-DDTHH:mm:ss'), // Formato local sin zona horaria
+        fecha: fechaHoraCompleta.format(), // Incluir información de zona horaria completa
         estatus: 'PENDIENTE' // El backend determinará el estatus correcto
       };
       
-      console.log('📤 === DATOS FINALES PARA ENVÍO ===');
-      console.log('📤 Objeto completo:', asistenciaData);
-      console.log('📤 Fecha final:', asistenciaData.fecha);
-      console.log('📤 Trabajador ID:', asistenciaData.id_trabajador);
+      console.log('📤 Datos a enviar:', asistenciaData);
+      console.log('📤 Fecha con offset:', asistenciaData.fecha);
       
       // PASO 3: Enviar al backend
-      console.log('🚀 Enviando al backend...');
       const response = await asistenciaService.create(asistenciaData);
-      console.log('✅ Respuesta del backend:', response);
       
-      // PASO 4: Verificar que se guardó correctamente
-      console.log('🔍 Verificando registro guardado:');
-      console.log('  - ID del registro:', response.id);
-      console.log('  - Fecha guardada:', response.fecha);
-      console.log('  - Estatus asignado:', response.estatus);
+      console.log('✅ Respuesta del servidor:', response);
       
-      // PASO 5: Recargar datos y cerrar diálogo
+      // PASO 4: Actualizar la interfaz
+      setDialogOpen(false);
+      setSelectedTrabajador(null);
+      setError(null);
+      
+      // Recargar datos para mostrar el nuevo registro
       await fetchData();
-      handleCloseDialog();
       
-      console.log('✅ === REGISTRO COMPLETADO EXITOSAMENTE ===');
+      // Mostrar mensaje de éxito temporal
+      setError(null);
+      setTimeout(() => {
+        setError(`✅ Asistencia registrada correctamente para ${selectedTrabajador.nombre} - Estatus: ${response.estatus}`);
+      }, 100);
+      
+      // Limpiar mensaje después de 5 segundos
+      setTimeout(() => {
+        setError(null);
+      }, 5000);
       
     } catch (err) {
-      console.error('❌ === ERROR EN REGISTRO ===');
-      console.error('❌ Error completo:', err);
-      console.error('❌ Response status:', err.response?.status);
-      console.error('❌ Response data:', err.response?.data);
+      console.error('❌ Error al registrar asistencia:', err);
       
-      let errorDetail = 'Error desconocido';
+      let errorDetail = '';
       if (err.response?.data?.detail) {
         if (Array.isArray(err.response.data.detail)) {
-          errorDetail = err.response.data.detail.map(e => `${e.loc?.join('.')}: ${e.msg}`).join(', ');
+          errorDetail = err.response.data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ');
         } else {
           errorDetail = err.response.data.detail;
         }
@@ -320,7 +344,25 @@ const RegistroAsistenciaManual = () => {
     console.log('  - Hora actual UTC:', dayjs().utc().format());
     console.log('👥 Lista de trabajadores:', trabajadores);
     console.log('📅 Registros del día:', asistenciasHoy);
+    console.log('🔧 Servicios importados:');
+    console.log('  - asistenciaService:', asistenciaService);
+    console.log('  - trabajadorService:', trabajadorService);
+    console.log('  - horarioService:', horarioService);
+    console.log('🌐 Backend URL:', process.env.REACT_APP_API_URL || 'http://localhost:8000');
     console.log('🔍 =================================');
+    
+    // Verificar token de autenticación
+    const token = localStorage.getItem('token');
+    console.log('🔐 Token presente:', !!token);
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        console.log('🔐 Token payload:', payload);
+        console.log('🔐 Token expiración:', new Date(payload.exp * 1000));
+      } catch (e) {
+        console.error('🔐 Error al decodificar token:', e);
+      }
+    }
     
     // Intentar recargar datos
     console.log('🔄 Recargando datos...');
@@ -410,379 +452,280 @@ const RegistroAsistenciaManual = () => {
         <Grid item xs={12} sm={6} md={2.4}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <PersonIcon color="primary" sx={{ mr: 2 }} />
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    Total
-                  </Typography>
-                  <Typography variant="h5">
-                    {estadisticas.total_trabajadores}
-                  </Typography>
-                </Box>
-              </Box>
+              <Typography color="text.secondary" gutterBottom variant="body2">
+                Total Trabajadores
+              </Typography>
+              <Typography variant="h4" component="div">
+                {estadisticas.total_trabajadores}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
         
         <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
+          <Card sx={{ borderLeft: 4, borderColor: 'success.main' }}>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <CheckCircleIcon color="success" sx={{ mr: 2 }} />
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    Asistencias
-                  </Typography>
-                  <Typography variant="h5">
-                    {estadisticas.asistencias}
-                  </Typography>
-                </Box>
-              </Box>
+              <Typography color="text.secondary" gutterBottom variant="body2">
+                Asistencias
+              </Typography>
+              <Typography variant="h4" component="div" color="success.main">
+                {estadisticas.asistencias}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
         
         <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
+          <Card sx={{ borderLeft: 4, borderColor: 'warning.main' }}>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <WarningIcon color="warning" sx={{ mr: 2 }} />
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    Retardos
-                  </Typography>
-                  <Typography variant="h5">
-                    {estadisticas.retardos}
-                  </Typography>
-                </Box>
-              </Box>
+              <Typography color="text.secondary" gutterBottom variant="body2">
+                Retardos
+              </Typography>
+              <Typography variant="h4" component="div" color="warning.main">
+                {estadisticas.retardos}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
         
         <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
+          <Card sx={{ borderLeft: 4, borderColor: 'error.main' }}>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <ErrorIcon color="error" sx={{ mr: 2 }} />
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    Faltas
-                  </Typography>
-                  <Typography variant="h5">
-                    {estadisticas.faltas}
-                  </Typography>
-                </Box>
-              </Box>
+              <Typography color="text.secondary" gutterBottom variant="body2">
+                Faltas
+              </Typography>
+              <Typography variant="h4" component="div" color="error.main">
+                {estadisticas.faltas}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
         
         <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
+          <Card sx={{ borderLeft: 4, borderColor: 'grey.500' }}>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <AccessTimeIcon color="info" sx={{ mr: 2 }} />
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    Pendientes
-                  </Typography>
-                  <Typography variant="h5">
-                    {estadisticas.no_registrados}
-                  </Typography>
-                </Box>
-              </Box>
+              <Typography color="text.secondary" gutterBottom variant="body2">
+                Sin Registro
+              </Typography>
+              <Typography variant="h4" component="div" color="text.secondary">
+                {estadisticas.no_registrados}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
       
       {/* Acciones principales */}
-      <Paper sx={{ p: 3, mb: 4 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={8}>
-            <Typography variant="h6" gutterBottom>
-              Métodos de Registro
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Registra la asistencia usando el método biométrico o manualmente
-            </Typography>
-          </Grid>
-          <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleOpenDialog}
-              sx={{ mr: 2 }}
-            >
-              Registro Manual
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<FingerprintIcon />}
-              disabled
-              title="Función disponible con lector biométrico"
-            >
-              Lector Biométrico
-            </Button>
-          </Grid>
-        </Grid>
-      </Paper>
+      <Box sx={{ mb: 3 }}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleOpenDialog}
+          size="large"
+        >
+          Registrar Asistencia Manual
+        </Button>
+      </Box>
       
-      {/* Lista de asistencias del día */}
+      {/* Tabla de asistencias del día */}
       <Card>
-        <CardHeader
+        <CardHeader 
           title="Registros del Día"
-          subheader={`${asistenciasHoy.length} registros de asistencia`}
-          action={
-            <Button
-              size="small"
-              onClick={fetchData}
-              disabled={loading}
-              startIcon={<RefreshIcon />}
-            >
-              Actualizar
-            </Button>
-          }
+          subheader={`Mostrando ${asistenciasHoy.length} registros`}
         />
         <CardContent>
-          {asistenciasHoy.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <AccessTimeIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary">
-                No hay registros de asistencia hoy
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Los registros aparecerán aquí conforme los trabajadores marquen su entrada
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleOpenDialog}
-              >
-                Registrar Primera Asistencia
-              </Button>
-            </Box>
-          ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Trabajador</TableCell>
+                  <TableCell>RFC</TableCell>
+                  <TableCell>Departamento</TableCell>
+                  <TableCell>Hora Registro</TableCell>
+                  <TableCell align="center">Estatus</TableCell>
+                  <TableCell align="center">Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {asistenciasHoy.length === 0 ? (
                   <TableRow>
-                    <TableCell>Trabajador</TableCell>
-                    <TableCell>Fecha</TableCell>
-                    <TableCell>Hora</TableCell>
-                    <TableCell>Estado</TableCell>
-                    <TableCell>Departamento</TableCell>
-                    <TableCell align="center">Acciones</TableCell>
+                    <TableCell colSpan={6} align="center">
+                      <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
+                        No hay registros de asistencia para hoy
+                      </Typography>
+                    </TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {asistenciasHoy.map((registro) => (
-                    <TableRow key={registro.id} hover>
+                ) : (
+                  asistenciasHoy.map((registro) => (
+                    <TableRow key={registro.id}>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                           <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                            {registro.nombre.charAt(0)}
+                            {registro.nombre ? registro.nombre.charAt(0) : '?'}
                           </Avatar>
-                          <Box>
-                            <Typography variant="subtitle2">
-                              {registro.nombre}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {registro.puesto}
-                            </Typography>
-                          </Box>
+                          {registro.nombre || 'Sin nombre'}
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatearFecha(registro.hora_registro)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatearHora(registro.hora_registro)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
+                      <TableCell>{registro.rfc || 'N/A'}</TableCell>
+                      <TableCell>{registro.departamento || 'Sin departamento'}</TableCell>
+                      <TableCell>{formatearHora(registro.hora_registro)}</TableCell>
+                      <TableCell align="center">
                         <Chip
-                          icon={getStatusIcon(registro.estatus)}
                           label={registro.estatus}
                           color={getChipColor(registro.estatus)}
+                          icon={getStatusIcon(registro.estatus)}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>{registro.departamento}</TableCell>
                       <TableCell align="center">
-                        <IconButton size="small" color="primary" title="Editar registro">
-                          <EditIcon fontSize="small" />
+                        <IconButton size="small" disabled>
+                          <EditIcon />
                         </IconButton>
-                        <IconButton size="small" color="error" title="Eliminar registro">
-                          <DeleteIcon fontSize="small" />
+                        <IconButton size="small" disabled>
+                          <DeleteIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </CardContent>
       </Card>
       
-      {/* Diálogo para registro manual */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      {/* Diálogo de registro manual */}
+      <Dialog 
+        open={dialogOpen} 
+        onClose={handleCloseDialog}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          Registro Manual de Asistencia
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <FingerprintIcon sx={{ mr: 1 }} />
+            Registrar Asistencia Manual
+          </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers>
           <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
-            <Box sx={{ pt: 2 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    <strong>Trabajadores disponibles: {trabajadores.length}</strong>
-                    {trabajadores.length === 0 && (
-                      <span style={{ color: 'red' }}> - ⚠️ No hay trabajadores cargados</span>
-                    )}
-                  </Typography>
-                  
-                  <Autocomplete
-                    options={trabajadores}
-                    getOptionLabel={(option) => {
-                      const nombreCompleto = `${option.nombre} ${option.apellidoPaterno} ${option.apellidoMaterno}`.trim();
-                      return `${nombreCompleto} - ${option.rfc}`;
-                    }}
-                    value={selectedTrabajador}
-                    onChange={(event, newValue) => {
-                      console.log('🎯 Trabajador seleccionado:', newValue);
-                      setSelectedTrabajador(newValue);
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Seleccionar Trabajador"
-                        placeholder="Buscar por nombre o RFC"
-                        fullWidth
-                        helperText={
-                          trabajadores.length === 0 
-                            ? '❌ No hay trabajadores disponibles. Verifica la conexión con el backend.' 
-                            : `✅ ${trabajadores.length} trabajadores cargados`
-                        }
-                        error={trabajadores.length === 0}
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <Box component="li" {...props}>
-                        <Avatar sx={{ mr: 2 }}>{option.nombre.charAt(0)}</Avatar>
-                        <Box>
-                          <Typography variant="subtitle2">
-                            {`${option.nombre} ${option.apellidoPaterno} ${option.apellidoMaterno}`.trim()}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {option.rfc} • {option.puesto} • {option.departamento}
-                          </Typography>
-                        </Box>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Autocomplete
+                  options={trabajadores}
+                  getOptionLabel={(option) => 
+                    `${option.nombre} ${option.apellidoPaterno} ${option.apellidoMaterno} - ${option.rfc}`
+                  }
+                  value={selectedTrabajador}
+                  onChange={(event, newValue) => {
+                    console.log('👤 Trabajador seleccionado:', newValue);
+                    setSelectedTrabajador(newValue);
+                  }}
+                  renderInput={(params) => (
+                    <TextField 
+                      {...params} 
+                      label="Buscar Trabajador" 
+                      fullWidth
+                      placeholder="Escribe para buscar..."
+                      helperText={
+                        trabajadores.length === 0 
+                          ? "❌ No hay trabajadores cargados - Revisar backend" 
+                          : `${trabajadores.length} trabajadores disponibles`
+                      }
+                    />
+                  )}
+                  renderOption={(props, option) => (
+                    <Box component="li" {...props}>
+                      <Avatar sx={{ mr: 2 }}>
+                        {option.nombre.charAt(0)}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="body1">
+                          {`${option.nombre} ${option.apellidoPaterno} ${option.apellidoMaterno}`}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          RFC: {option.rfc} | Depto: {option.departamento}
+                        </Typography>
                       </Box>
-                    )}
-                    noOptionsText={
-                      trabajadores.length === 0 
-                        ? "❌ No hay trabajadores cargados - Revisar backend" 
-                        : "No se encontraron coincidencias"
-                    }
-                    loading={loading}
-                    disabled={trabajadores.length === 0}
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <DatePicker
-                    label="Fecha"
-                    value={fechaSeleccionada}
-                    onChange={(newValue) => {
-                      console.log('📅 Nueva fecha seleccionada:', newValue.format('YYYY-MM-DD'));
-                      setFechaSeleccionada(newValue);
-                    }}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        helperText: `Fecha: ${fechaSeleccionada.format('DD/MM/YYYY')}`
-                      }
-                    }}
-                  />
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <TimePicker
-                    label="Hora de Registro"
-                    value={horaRegistro}
-                    onChange={(newValue) => {
-                      console.log('🕐 Nueva hora seleccionada:', newValue.format('HH:mm:ss'));
-                      setHoraRegistro(newValue);
-                    }}
-                    ampm={false}
-                    views={['hours', 'minutes', 'seconds']}
-                    format="HH:mm:ss"
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        helperText: `Hora: ${horaRegistro.format('HH:mm:ss')}`
-                      }
-                    }}
-                  />
-                </Grid>
-                
-                {/* Información de debug en tiempo real */}
-                <Grid item xs={12}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    <Typography variant="caption" color="text.secondary">
-                      <strong>Vista Previa:</strong><br />
-                      Fecha seleccionada: {fechaSeleccionada.format('YYYY-MM-DD')}<br />
-                      Hora seleccionada: {horaRegistro.format('HH:mm:ss')}<br />
-                      Combinación final: {combinarFechaHora(fechaSeleccionada, horaRegistro).format('YYYY-MM-DD HH:mm:ss')}<br />
-                      Zona horaria: {TIMEZONE_LOCAL}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                
-                {selectedTrabajador && (
-                  <Grid item xs={12}>
-                    <Alert severity="info">
-                      Se registrará la asistencia de <strong>{selectedTrabajador.nombre}</strong> 
-                      para el {fechaSeleccionada.format('DD/MM/YYYY')} a las {horaRegistro.format('HH:mm:ss')}.
-                      <br />
-                      <small><strong>Nota:</strong> El sistema determinará automáticamente si es asistencia, retardo o falta basado en su horario asignado.</small>
-                    </Alert>
-                  </Grid>
-                )}
-                
-                {/* Debug información en el diálogo */}
-                {trabajadores.length === 0 && (
-                  <Grid item xs={12}>
-                    <Alert severity="warning">
-                      <Typography variant="body2">
-                        <strong>Debug Info:</strong>
-                        <br />• Backend URL: {process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}
-                        <br />• Total trabajadores en estado: {trabajadores.length}
-                        <br />• Loading: {loading ? 'Sí' : 'No'}
-                        <br />• Error: {error || 'Ninguno'}
-                      </Typography>
-                    </Alert>
-                  </Grid>
-                )}
+                    </Box>
+                  )}
+                  noOptionsText={
+                    trabajadores.length === 0 
+                      ? "❌ No hay trabajadores cargados - Revisar backend" 
+                      : "No se encontraron coincidencias"
+                  }
+                  loading={loading}
+                  disabled={trabajadores.length === 0}
+                />
               </Grid>
-            </Box>
+              
+              <Grid item xs={12} sm={6}>
+                <DatePicker
+                  label="Fecha"
+                  value={fechaSeleccionada}
+                  onChange={(newValue) => {
+                    console.log('📅 Nueva fecha seleccionada:', newValue.format('YYYY-MM-DD'));
+                    setFechaSeleccionada(newValue);
+                  }}
+                  slotProps={{
+                    textField: {
+                      fullWidth: true,
+                      helperText: `Fecha: ${fechaSeleccionada.format('DD/MM/YYYY')}`
+                    }
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TimePicker
+                  label="Hora de Registro"
+                  value={horaRegistro}
+                  onChange={(newValue) => {
+                    console.log('🕐 Nueva hora seleccionada:', newValue.format('HH:mm:ss'));
+                    setHoraRegistro(newValue);
+                  }}
+                  ampm={false}
+                  views={['hours', 'minutes', 'seconds']}
+                  format="HH:mm:ss"
+                  slotProps={{
+                    textField: {
+                      fullWidth: true,
+                      helperText: `Hora: ${horaRegistro.format('HH:mm:ss')}`
+                    }
+                  }}
+                />
+              </Grid>
+              
+              {/* Información de debug en tiempo real */}
+              <Grid item xs={12}>
+                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    <strong>Vista Previa:</strong><br />
+                    Fecha seleccionada: {fechaSeleccionada.format('YYYY-MM-DD')}<br />
+                    Hora seleccionada: {horaRegistro.format('HH:mm:ss')}<br />
+                    Combinación final: {combinarFechaHora(fechaSeleccionada, horaRegistro).format('YYYY-MM-DD HH:mm:ss')}<br />
+                    Zona horaria: {TIMEZONE_LOCAL}
+                  </Typography>
+                </Paper>
+              </Grid>
+              
+              {selectedTrabajador && (
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    Se registrará la asistencia de <strong>{selectedTrabajador.nombre}</strong> 
+                    para el {fechaSeleccionada.format('DD/MM/YYYY')} a las {horaRegistro.format('HH:mm:ss')}.
+                  </Alert>
+                </Grid>
+              )}
+            </Grid>
           </LocalizationProvider>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleRegistrarAsistencia}
+          <Button onClick={handleCloseDialog}>Cancelar</Button>
+          <Button 
+            onClick={handleRegistrarAsistencia} 
             variant="contained"
-            disabled={!selectedTrabajador || loadingRegistro || trabajadores.length === 0}
+            disabled={!selectedTrabajador || loadingRegistro}
             startIcon={loadingRegistro ? <CircularProgress size={20} /> : <CheckCircleIcon />}
           >
             {loadingRegistro ? 'Registrando...' : 'Registrar Asistencia'}
