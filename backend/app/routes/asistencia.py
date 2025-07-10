@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from sqlalchemy import cast, Date, and_, or_
+from typing import List, Optional, Literal
 from datetime import datetime, date, time, timedelta
 import pytz
 from app.database import get_db
@@ -27,118 +28,132 @@ router = APIRouter()
 # Los Mochis está en la zona horaria de Montaña (MST/MDT)
 TIMEZONE_MEXICO = pytz.timezone('America/Mazatlan')
 
-def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: datetime, db: Session) -> str:
+def determinar_tipo_registro(trabajador: Trabajador, fecha_hora_registro: datetime, db: Session) -> Literal["ENTRADA", "SALIDA"]:
     """
-    Determina el estatus de asistencia basado en el horario del trabajador.
+    Determina si el registro es de entrada o salida basándose en:
+    1. Si ya existe un registro de entrada para ese día
+    2. La cercanía a la hora de entrada o salida programada
+    """
+    print(f"=== DETERMINANDO TIPO DE REGISTRO ===")
     
-    CORREGIDO: Manejo adecuado de zonas horarias y comparación de horas.
+    # Obtener registros existentes del día
+    fecha_inicio = datetime.combine(fecha_hora_registro.date(), time.min)
+    fecha_fin = datetime.combine(fecha_hora_registro.date(), time.max)
+    
+    registros_del_dia = db.query(RegistroAsistencia).filter(
+        RegistroAsistencia.id_trabajador == trabajador.id,
+        RegistroAsistencia.fecha >= fecha_inicio,
+        RegistroAsistencia.fecha <= fecha_fin
+    ).order_by(RegistroAsistencia.fecha).all()
+    
+    print(f"Registros existentes del día: {len(registros_del_dia)}")
+    
+    # Si no hay registros, es ENTRADA
+    if not registros_del_dia:
+        print("No hay registros previos, es ENTRADA")
+        return "ENTRADA"
+    
+    # Contar registros de entrada
+    registros_entrada = [r for r in registros_del_dia if r.estatus in ["ASISTENCIA", "RETARDO_MENOR", "RETARDO_MAYOR", "FALTA"]]
+    registros_salida = [r for r in registros_del_dia if r.estatus == "SALIDA"]
+    
+    print(f"Registros de entrada: {len(registros_entrada)}")
+    print(f"Registros de salida: {len(registros_salida)}")
+    
+    # Si hay igual o más salidas que entradas, el siguiente es ENTRADA
+    if len(registros_salida) >= len(registros_entrada):
+        print("Ya hay salida registrada, siguiente es ENTRADA")
+        return "ENTRADA"
+    
+    # Si hay más entradas que salidas, el siguiente es SALIDA
+    print("Ya hay entrada registrada, siguiente es SALIDA")
+    return "SALIDA"
+
+def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: datetime, tipo_registro: str, db: Session) -> str:
     """
-    print(f"=== DETERMINANDO ESTATUS PARA TRABAJADOR {trabajador.id} ===")
+    Determina el estatus de asistencia basado en:
+    - El tipo de registro (ENTRADA o SALIDA)
+    - El horario del trabajador
+    - Las reglas de retardo (solo para ENTRADA)
+    """
+    print(f"=== DETERMINANDO ESTATUS PARA {tipo_registro} ===")
     print(f"Trabajador: {trabajador.nombre} {trabajador.apellidoPaterno}")
-    print(f"Fecha/hora registro recibida: {fecha_hora_registro}")
-    print(f"Tipo de fecha_hora_registro: {type(fecha_hora_registro)}")
+    print(f"Fecha/hora registro: {fecha_hora_registro}")
     
-    # PASO 1: Normalizar datetime para trabajar en zona horaria local
+    # Para registros de SALIDA, siempre es "SALIDA"
+    if tipo_registro == "SALIDA":
+        print("Es registro de SALIDA")
+        return "SALIDA"
+    
+    # Para registros de ENTRADA, calcular si hay retardo
+    # Normalizar datetime para trabajar en zona horaria local
     if fecha_hora_registro.tzinfo is not None:
-        # Si tiene timezone, convertir a México
         fecha_hora_local = fecha_hora_registro.astimezone(TIMEZONE_MEXICO)
-        print(f"Convertido a zona horaria México: {fecha_hora_local}")
     else:
-        # Si es naive, asumir que ya está en hora local de México
         fecha_hora_local = TIMEZONE_MEXICO.localize(fecha_hora_registro)
-        print(f"Localizado a zona horaria México: {fecha_hora_local}")
     
-    # PASO 2: Crear versión naive para comparaciones (sin timezone info)
     fecha_hora_naive = fecha_hora_local.replace(tzinfo=None)
-    print(f"Fecha/hora naive para comparación: {fecha_hora_naive}")
     
-    # PASO 3: Obtener el horario del trabajador
+    # Obtener el horario del trabajador
     horario = db.query(Horario).filter(Horario.id == trabajador.id_horario).first()
     if not horario:
-        print(f"⚠️ Trabajador sin horario asignado, asignando ASISTENCIA por defecto")
+        print("⚠️ Trabajador sin horario asignado, asignando ASISTENCIA por defecto")
         return "ASISTENCIA"
     
-    print(f"Horario encontrado: {horario.descripcion}")
-    
-    # PASO 4: Determinar qué día de la semana es (0 = lunes, 6 = domingo)
+    # Determinar qué día de la semana es
     dia_semana = fecha_hora_naive.weekday()
-    print(f"Día de la semana: {dia_semana} (0=lunes, 6=domingo)")
-    
-    # PASO 5: Obtener la hora de entrada según el día
     hora_entrada = None
     
     if dia_semana == 0:  # Lunes
         hora_entrada = horario.lunesEntrada
-        print(f"Es lunes, hora de entrada: {hora_entrada}")
     elif dia_semana == 1:  # Martes
         hora_entrada = horario.martesEntrada
-        print(f"Es martes, hora de entrada: {hora_entrada}")
     elif dia_semana == 2:  # Miércoles
         hora_entrada = horario.miercolesEntrada
-        print(f"Es miércoles, hora de entrada: {hora_entrada}")
     elif dia_semana == 3:  # Jueves
         hora_entrada = horario.juevesEntrada
-        print(f"Es jueves, hora de entrada: {hora_entrada}")
     elif dia_semana == 4:  # Viernes
         hora_entrada = horario.viernesEntrada
-        print(f"Es viernes, hora de entrada: {hora_entrada}")
-    else:  # Fin de semana (sábado=5, domingo=6)
-        print(f"📅 Es fin de semana, asignando ASISTENCIA")
+    else:  # Fin de semana
+        print("📅 Es fin de semana, asignando ASISTENCIA")
         return "ASISTENCIA"
     
     if not hora_entrada:
-        print(f"⚠️ No hay hora de entrada para este día, asignando ASISTENCIA")
+        print("⚠️ No hay hora de entrada para este día, asignando ASISTENCIA")
         return "ASISTENCIA"
     
-    print(f"Hora de entrada programada: {hora_entrada}")
-    print(f"Tipo de hora_entrada: {type(hora_entrada)}")
-    
-    # PASO 6: CORREGIDO - Crear datetime de la hora de entrada para el mismo día
+    # Crear datetime de la hora de entrada programada
     try:
-        # Combinar la fecha del registro con la hora de entrada programada
         fecha_entrada_programada = datetime.combine(
             fecha_hora_naive.date(), 
             hora_entrada
         )
-        print(f"Fecha/hora entrada programada: {fecha_entrada_programada}")
-        print(f"Tipo de fecha_entrada_programada: {type(fecha_entrada_programada)}")
         
-    except Exception as e:
-        print(f"❌ Error al combinar fecha y hora: {e}")
-        print(f"fecha_hora_naive.date(): {fecha_hora_naive.date()}")
-        print(f"hora_entrada: {hora_entrada}")
-        return "ASISTENCIA"
-    
-    # PASO 7: CORREGIDO - Calcular la diferencia en minutos
-    try:
+        # Calcular la diferencia en minutos
         diferencia = fecha_hora_naive - fecha_entrada_programada
         minutos_diferencia = int(diferencia.total_seconds() / 60)
         
-        print(f"=== CÁLCULO DE DIFERENCIA ===")
         print(f"Hora de registro: {fecha_hora_naive.strftime('%H:%M:%S')}")
         print(f"Hora programada: {fecha_entrada_programada.strftime('%H:%M:%S')}")
-        print(f"Diferencia en segundos: {diferencia.total_seconds()}")
         print(f"Diferencia en minutos: {minutos_diferencia}")
         
     except Exception as e:
         print(f"❌ Error al calcular diferencia: {e}")
         return "ASISTENCIA"
     
-    # PASO 8: Aplicar las reglas de tolerancia CORREGIDAS
+    # Aplicar las reglas de tolerancia
     if minutos_diferencia <= 10:
-        print(f"✅ ASISTENCIA (llegó {minutos_diferencia} minutos después del horario)")
+        print(f"✅ ASISTENCIA (llegó {minutos_diferencia} minutos después)")
         return "ASISTENCIA"
     elif minutos_diferencia <= 20:
-        print(f"⚠️ RETARDO_MENOR (llegó {minutos_diferencia} minutos después del horario)")
+        print(f"⚠️ RETARDO_MENOR (llegó {minutos_diferencia} minutos después)")
         return "RETARDO_MENOR"
     elif minutos_diferencia <= 30:
-        print(f"⚠️ RETARDO_MAYOR (llegó {minutos_diferencia} minutos después del horario)")
+        print(f"⚠️ RETARDO_MAYOR (llegó {minutos_diferencia} minutos después)")
         return "RETARDO_MAYOR"
     else:
-        print(f"❌ FALTA (llegó {minutos_diferencia} minutos después del horario)")
+        print(f"❌ FALTA (llegó {minutos_diferencia} minutos después)")
         return "FALTA"
-
-# IMPORTANTE: Las rutas más específicas DEBEN ir ANTES que las rutas con parámetros
 
 # ===== RUTAS ESPECIALES (DEBEN IR PRIMERO) =====
 
@@ -148,8 +163,7 @@ def get_asistencias_hoy(
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
     """
-    IMPORTANTE: Esta ruta DEBE ir ANTES que /asistencias/{asistencia_id}
-    para evitar que FastAPI confunda 'hoy' con un ID
+    Obtiene las asistencias del día actual con información consolidada
     """
     print("=== OBTENIENDO ASISTENCIAS DE HOY ===")
     
@@ -158,28 +172,9 @@ def get_asistencias_hoy(
     hoy_inicio = ahora_mexico.replace(hour=0, minute=0, second=0, microsecond=0)
     hoy_fin = ahora_mexico.replace(hour=23, minute=59, second=59, microsecond=999999)
     
-    # Convertir a naive datetime para la consulta en base de datos
+    # Convertir a naive datetime para la consulta
     hoy_inicio_naive = hoy_inicio.replace(tzinfo=None)
     hoy_fin_naive = hoy_fin.replace(tzinfo=None)
-    
-    print(f"Rango de fechas (México): {hoy_inicio} - {hoy_fin}")
-    print(f"Rango naive para BD: {hoy_inicio_naive} - {hoy_fin_naive}")
-    
-    # Consultar asistencias de hoy con JOIN para obtener datos del trabajador
-    asistencias_query = db.query(
-        RegistroAsistencia, 
-        Trabajador, 
-        Departamento
-    ).join(
-        Trabajador, RegistroAsistencia.id_trabajador == Trabajador.id
-    ).join(
-        Departamento, Trabajador.departamento == Departamento.id
-    ).filter(
-        RegistroAsistencia.fecha >= hoy_inicio_naive,
-        RegistroAsistencia.fecha <= hoy_fin_naive
-    ).all()
-    
-    print(f"Asistencias encontradas: {len(asistencias_query)}")
     
     # Obtener todos los trabajadores activos
     trabajadores = db.query(Trabajador, Departamento).join(
@@ -188,40 +183,54 @@ def get_asistencias_hoy(
     
     print(f"Total trabajadores activos: {len(trabajadores)}")
     
-    # Crear diccionario de asistencias por trabajador
-    asistencias_por_trabajador = {}
-    for asistencia, trabajador, departamento in asistencias_query:
-        asistencias_por_trabajador[trabajador.id] = {
-            'asistencia': asistencia,
-            'trabajador': trabajador,
-            'departamento': departamento
-        }
+    # Obtener todos los registros del día
+    registros_del_dia = db.query(RegistroAsistencia).filter(
+        RegistroAsistencia.fecha >= hoy_inicio_naive,
+        RegistroAsistencia.fecha <= hoy_fin_naive
+    ).order_by(RegistroAsistencia.id_trabajador, RegistroAsistencia.fecha).all()
     
-    # Preparar la respuesta con la estructura correcta
+    # Agrupar registros por trabajador
+    registros_por_trabajador = {}
+    for registro in registros_del_dia:
+        if registro.id_trabajador not in registros_por_trabajador:
+            registros_por_trabajador[registro.id_trabajador] = []
+        registros_por_trabajador[registro.id_trabajador].append(registro)
+    
+    # Preparar la respuesta consolidada
     resultado = []
     for trabajador, departamento in trabajadores:
-        if trabajador.id in asistencias_por_trabajador:
-            # Trabajador con asistencia registrada
-            data = asistencias_por_trabajador[trabajador.id]
-            asistencia = data['asistencia']
-            resultado.append({
-                "id": trabajador.id,
-                "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
-                "rfc": trabajador.rfc,
-                "departamento": departamento.descripcion,
-                "hora_registro": asistencia.fecha,
-                "estatus": asistencia.estatus
-            })
+        registros = registros_por_trabajador.get(trabajador.id, [])
+        
+        # Buscar registro de entrada (primer registro que no sea SALIDA)
+        entrada = None
+        salida = None
+        
+        for registro in registros:
+            if registro.estatus != "SALIDA" and not entrada:
+                entrada = registro
+            elif registro.estatus == "SALIDA":
+                salida = registro
+        
+        # Determinar estatus consolidado
+        if entrada:
+            estatus = entrada.estatus
+            hora_entrada = entrada.fecha
         else:
-            # Trabajador sin asistencia registrada
-            resultado.append({
-                "id": trabajador.id,
-                "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
-                "rfc": trabajador.rfc,
-                "departamento": departamento.descripcion,
-                "hora_registro": None,
-                "estatus": "NO_REGISTRADO"
-            })
+            estatus = "NO_REGISTRADO"
+            hora_entrada = None
+            
+        hora_salida = salida.fecha if salida else None
+        
+        resultado.append({
+            "id": trabajador.id,
+            "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+            "rfc": trabajador.rfc,
+            "departamento": departamento.descripcion,
+            "hora_entrada": hora_entrada,
+            "hora_salida": hora_salida,
+            "estatus": estatus,
+            "registros_totales": len(registros)
+        })
     
     # Calcular estadísticas
     estadisticas = {
@@ -232,12 +241,92 @@ def get_asistencias_hoy(
         "no_registrados": sum(1 for r in resultado if r["estatus"] == "NO_REGISTRADO")
     }
     
-    print(f"Estadísticas calculadas: {estadisticas}")
-    
     return {
         "fecha": ahora_mexico.date(),
-        "registros": resultado,
-        "estadisticas": estadisticas
+        "estadisticas": estadisticas,
+        "registros": resultado
+    }
+
+@router.get("/asistencias/trabajador/{trabajador_id}")
+def get_asistencias_by_trabajador(
+    trabajador_id: int,
+    fecha_inicio: Optional[date] = None,
+    fecha_fin: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    """
+    Obtiene las asistencias de un trabajador con registros de entrada y salida
+    """
+    trabajador = db.query(Trabajador).filter(Trabajador.id == trabajador_id).first()
+    if not trabajador:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Trabajador con ID {trabajador_id} no encontrado"
+        )
+    
+    if not fecha_inicio:
+        fecha_inicio = date.today() - timedelta(days=30)
+    
+    if not fecha_fin:
+        fecha_fin = date.today()
+    
+    # Obtener todos los registros del período
+    registros = db.query(RegistroAsistencia).filter(
+        RegistroAsistencia.id_trabajador == trabajador_id,
+        RegistroAsistencia.fecha >= datetime.combine(fecha_inicio, time.min),
+        RegistroAsistencia.fecha <= datetime.combine(fecha_fin, time.max)
+    ).order_by(RegistroAsistencia.fecha).all()
+    
+    # Agrupar por día
+    registros_por_dia = {}
+    for registro in registros:
+        fecha_key = registro.fecha.date()
+        if fecha_key not in registros_por_dia:
+            registros_por_dia[fecha_key] = []
+        registros_por_dia[fecha_key].append(registro)
+    
+    # Preparar respuesta con días consolidados
+    dias_consolidados = []
+    fecha_actual = fecha_inicio
+    
+    while fecha_actual <= fecha_fin:
+        registros_del_dia = registros_por_dia.get(fecha_actual, [])
+        
+        entrada = None
+        salida = None
+        
+        for registro in registros_del_dia:
+            if registro.estatus != "SALIDA" and not entrada:
+                entrada = registro
+            elif registro.estatus == "SALIDA":
+                salida = registro
+        
+        dias_consolidados.append({
+            "fecha": fecha_actual,
+            "entrada": {
+                "hora": entrada.fecha if entrada else None,
+                "estatus": entrada.estatus if entrada else "NO_REGISTRADO"
+            },
+            "salida": {
+                "hora": salida.fecha if salida else None,
+                "estatus": "SALIDA" if salida else "NO_REGISTRADO"
+            }
+        })
+        
+        fecha_actual += timedelta(days=1)
+    
+    return {
+        "trabajador": {
+            "id": trabajador.id,
+            "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+            "rfc": trabajador.rfc
+        },
+        "periodo": {
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": fecha_fin
+        },
+        "registros": dias_consolidados
     }
 
 # ===== RUTAS CRUD BÁSICAS =====
@@ -248,8 +337,10 @@ def create_asistencia(
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    """Crear un nuevo registro de asistencia manual"""
-    print(f"=== CREANDO REGISTRO DE ASISTENCIA MANUAL ===")
+    """
+    Crear un nuevo registro de asistencia (entrada o salida)
+    """
+    print(f"=== CREANDO REGISTRO DE ASISTENCIA ===")
     print(f"Datos recibidos: {asistencia.dict()}")
     
     # Verificar que el trabajador existe
@@ -263,41 +354,27 @@ def create_asistencia(
             detail=f"Trabajador con ID {asistencia.id_trabajador} no encontrado"
         )
     
-    print(f"Trabajador encontrado: {trabajador.nombre} {trabajador.apellidoPaterno}")
-    
-    # CORREGIDO: Procesar la fecha recibida del frontend
+    # Procesar la fecha recibida
     try:
         fecha_recibida = asistencia.fecha
-        print(f"Fecha recibida del frontend: {fecha_recibida}")
-        print(f"Tipo de fecha recibida: {type(fecha_recibida)}")
         
-        # Si la fecha viene como string ISO, convertirla a datetime
         if isinstance(fecha_recibida, str):
-            # Parsear la fecha ISO
             if fecha_recibida.endswith('Z'):
-                # UTC format
                 fecha_dt = datetime.fromisoformat(fecha_recibida.replace('Z', '+00:00'))
                 fecha_local = fecha_dt.astimezone(TIMEZONE_MEXICO)
             elif '+' in fecha_recibida or '-' in fecha_recibida[-6:]:
-                # Timezone aware format con offset (e.g., 2025-01-07T10:30:00-07:00)
                 fecha_dt = datetime.fromisoformat(fecha_recibida)
                 fecha_local = fecha_dt.astimezone(TIMEZONE_MEXICO)
             else:
-                # Naive format - asumir que está en hora local de México
                 fecha_dt = datetime.fromisoformat(fecha_recibida)
                 fecha_local = TIMEZONE_MEXICO.localize(fecha_dt)
         else:
-            # Ya es datetime
             if fecha_recibida.tzinfo is not None:
                 fecha_local = fecha_recibida.astimezone(TIMEZONE_MEXICO)
             else:
                 fecha_local = TIMEZONE_MEXICO.localize(fecha_recibida)
         
-        print(f"Fecha procesada (México): {fecha_local}")
-        
-        # Para guardar en BD, usar naive datetime en hora local
         fecha_para_bd = fecha_local.replace(tzinfo=None)
-        print(f"Fecha para base de datos: {fecha_para_bd}")
         
     except Exception as e:
         print(f"❌ Error al procesar fecha: {e}")
@@ -306,30 +383,28 @@ def create_asistencia(
             detail=f"Error al procesar la fecha: {str(e)}"
         )
     
-    # CORREGIDO: Determinar automáticamente el estatus basado en el horario
-    try:
-        estatus_calculado = determinar_estatus_asistencia(trabajador, fecha_para_bd, db)
-        print(f"Estatus calculado: {estatus_calculado}")
-    except Exception as e:
-        print(f"❌ Error al calcular estatus: {e}")
-        # En caso de error, usar ASISTENCIA como valor por defecto
-        estatus_calculado = "ASISTENCIA"
-        print(f"Usando estatus por defecto: {estatus_calculado}")
+    # Determinar tipo de registro (ENTRADA o SALIDA)
+    tipo_registro = determinar_tipo_registro(trabajador, fecha_para_bd, db)
+    print(f"Tipo de registro determinado: {tipo_registro}")
     
-    # Crear el registro de asistencia con el estatus calculado
+    # Determinar estatus basado en el tipo de registro
+    estatus_calculado = determinar_estatus_asistencia(
+        trabajador, fecha_para_bd, tipo_registro, db
+    )
+    print(f"Estatus calculado: {estatus_calculado}")
+    
+    # Crear el registro
     db_asistencia = RegistroAsistencia(
         id_trabajador=asistencia.id_trabajador,
-        fecha=fecha_para_bd,  # Usar fecha procesada
-        estatus=estatus_calculado  # Usar estatus calculado
+        fecha=fecha_para_bd,
+        estatus=estatus_calculado
     )
     
     db.add(db_asistencia)
     db.commit()
     db.refresh(db_asistencia)
     
-    print(f"✅ Asistencia registrada con ID: {db_asistencia.id}")
-    print(f"   Fecha guardada: {db_asistencia.fecha}")
-    print(f"   Estatus: {db_asistencia.estatus}")
+    print(f"✅ Registro creado - ID: {db_asistencia.id}, Tipo: {tipo_registro}, Estatus: {estatus_calculado}")
     
     return db_asistencia
 
@@ -347,7 +422,6 @@ def list_asistencias(
 ):
     query = db.query(RegistroAsistencia)
     
-    # Aplicar filtros
     if fecha_inicio and fecha_fin:
         fecha_inicio_dt = datetime.combine(fecha_inicio, time.min)
         fecha_fin_dt = datetime.combine(fecha_fin, time.max)
@@ -365,7 +439,7 @@ def list_asistencias(
     if estatus:
         query = query.filter(RegistroAsistencia.estatus == estatus)
     
-    return query.offset(skip).limit(limit).all()
+    return query.order_by(RegistroAsistencia.fecha.desc()).offset(skip).limit(limit).all()
 
 @router.get("/asistencias/{asistencia_id}", response_model=RegistroAsistenciaOut)
 def get_asistencia(
@@ -395,28 +469,7 @@ def update_asistencia(
             detail=f"Registro de asistencia con ID {asistencia_id} no encontrado"
         )
     
-    # Actualizar campos si están presentes en la solicitud
     update_data = asistencia_update.dict(exclude_unset=True)
-    
-    # Si se actualiza la fecha, recalcular el estatus
-    if 'fecha' in update_data:
-        trabajador = db.query(Trabajador).filter(Trabajador.id == db_asistencia.id_trabajador).first()
-        if trabajador:
-            try:
-                # Procesar la nueva fecha igual que en create
-                nueva_fecha = update_data['fecha']
-                if isinstance(nueva_fecha, str):
-                    nueva_fecha = datetime.fromisoformat(nueva_fecha.replace('Z', '+00:00'))
-                
-                if nueva_fecha.tzinfo is not None:
-                    nueva_fecha = nueva_fecha.astimezone(TIMEZONE_MEXICO).replace(tzinfo=None)
-                
-                nuevo_estatus = determinar_estatus_asistencia(trabajador, nueva_fecha, db)
-                update_data['estatus'] = nuevo_estatus
-                update_data['fecha'] = nueva_fecha
-                print(f"Recalculando estatus por cambio de fecha: {nuevo_estatus}")
-            except Exception as e:
-                print(f"Error al recalcular estatus: {e}")
     
     for key, value in update_data.items():
         setattr(db_asistencia, key, value)

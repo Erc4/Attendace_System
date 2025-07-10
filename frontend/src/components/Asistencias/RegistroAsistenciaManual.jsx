@@ -137,6 +137,9 @@ const RegistroAsistenciaManual = () => {
         no_registrados: 0
       });
       
+      // Log para debug de la estructura de datos
+      console.log('📊 Estructura de registros:', asistenciasResponse.registros?.[0]);
+      
     } catch (err) {
       console.error('❌ Error al cargar datos:', err);
       console.error('❌ Stack trace:', err.stack);
@@ -255,8 +258,13 @@ const RegistroAsistenciaManual = () => {
       
       // Mostrar mensaje de éxito temporal
       setError(null);
+      
+      // Determinar tipo de registro basado en el estatus
+      const tipoRegistro = response.estatus === 'SALIDA' ? 'SALIDA' : 'ENTRADA';
+      const mensaje = `✅ ${tipoRegistro} registrada correctamente para ${selectedTrabajador.nombre} - Estatus: ${response.estatus}`;
+      
       setTimeout(() => {
-        setError(`✅ Asistencia registrada correctamente para ${selectedTrabajador.nombre} - Estatus: ${response.estatus}`);
+        setError(mensaje);
       }, 100);
       
       // Limpiar mensaje después de 5 segundos
@@ -300,6 +308,7 @@ const RegistroAsistenciaManual = () => {
     if (estatus === 'RETARDO_MENOR' || estatus === 'RETARDO_MAYOR') return <WarningIcon />;
     if (estatus === 'FALTA') return <ErrorIcon />;
     if (estatus === 'JUSTIFICADO') return <AccessTimeIcon />;
+    if (estatus === 'SALIDA') return <AccessTimeIcon />;
     return <PersonIcon />;
   };
   
@@ -418,7 +427,7 @@ const RegistroAsistenciaManual = () => {
       
       {error && (
         <Alert 
-          severity="error" 
+          severity={error.includes('✅') ? 'success' : 'error'}
           sx={{ mb: 3 }}
           action={
             <Button 
@@ -541,8 +550,10 @@ const RegistroAsistenciaManual = () => {
                   <TableCell>Trabajador</TableCell>
                   <TableCell>RFC</TableCell>
                   <TableCell>Departamento</TableCell>
-                  <TableCell>Hora Registro</TableCell>
+                  <TableCell>Hora Entrada</TableCell>
+                  <TableCell>Hora Salida</TableCell>
                   <TableCell align="center">Estatus</TableCell>
+                  <TableCell align="center">Registros</TableCell>
                   <TableCell align="center">Acciones</TableCell>
                 </TableRow>
               </TableHead>
@@ -568,13 +579,43 @@ const RegistroAsistenciaManual = () => {
                       </TableCell>
                       <TableCell>{registro.rfc || 'N/A'}</TableCell>
                       <TableCell>{registro.departamento || 'Sin departamento'}</TableCell>
-                      <TableCell>{formatearHora(registro.hora_registro)}</TableCell>
+                      <TableCell>
+                        {registro.hora_entrada ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <AccessTimeIcon fontSize="small" color="success" />
+                            {formatearHora(registro.hora_entrada)}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            --:--:--
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {registro.hora_salida ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <AccessTimeIcon fontSize="small" color="info" />
+                            {formatearHora(registro.hora_salida)}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            --:--:--
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell align="center">
                         <Chip
                           label={registro.estatus}
                           color={getChipColor(registro.estatus)}
                           icon={getStatusIcon(registro.estatus)}
                           size="small"
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={registro.registros_totales || 0}
+                          size="small"
+                          variant="outlined"
                         />
                       </TableCell>
                       <TableCell align="center">
@@ -712,8 +753,13 @@ const RegistroAsistenciaManual = () => {
               {selectedTrabajador && (
                 <Grid item xs={12}>
                   <Alert severity="info">
-                    Se registrará la asistencia de <strong>{selectedTrabajador.nombre}</strong> 
-                    para el {fechaSeleccionada.format('DD/MM/YYYY')} a las {horaRegistro.format('HH:mm:ss')}.
+                    <Typography variant="body2">
+                      Se registrará la asistencia de <strong>{selectedTrabajador.nombre}</strong> 
+                      para el {fechaSeleccionada.format('DD/MM/YYYY')} a las {horaRegistro.format('HH:mm:ss')}.
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                      El sistema determinará automáticamente si es entrada o salida según los registros existentes del día.
+                    </Typography>
                   </Alert>
                 </Grid>
               )}
