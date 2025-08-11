@@ -149,14 +149,14 @@ const Sidebar = ({ open }) => {
               <ListItem 
                 button 
                 component={RouterLink} 
-                to="/reportes/asistencias-mensuales" 
-                selected={isActive('/reportes/asistencias-mensuales')}
+                to="/reportes/retardos-faltas" 
+                selected={isActive('/reportes/retardos-faltas')}
                 sx={{ pl: 4 }}
               >
                 <ListItemIcon>
                   <DateRangeIcon 
                     fontSize="small" 
-                    color={isActive('/reportes/asistencias-mensuales') ? 'primary' : 'inherit'} 
+                    color={isActive('/reportes/retardos-faltas') ? 'primary' : 'inherit'} 
                   />
                 </ListItemIcon>
                 <ListItemText primary="Asistencias Mensuales" />

@@ -510,7 +510,7 @@ const horarioService = {
   },
 };
 
-// Servicios para reportes
+// Servicios para reportes - CORREGIDO
 const reporteService = {
   getAsistenciasDiarias: async (fecha, departamentoId) => {
     try {
@@ -609,6 +609,102 @@ const reporteService = {
       return response.data;
     } catch (error) {
       console.error('❌ Error al obtener reporte de justificaciones:', error);
+      throw error;
+    }
+  },
+
+  // Función para obtener reporte de retardos y faltas
+  getReporteRetardosFaltas: async (params) => {
+    try {
+      console.log('📤 Solicitando reporte de retardos y faltas:', params);
+      
+      // Construir parámetros de consulta
+      const queryParams = new URLSearchParams();
+      if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+      if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+      if (params.departamento_id) queryParams.append('departamento_id', params.departamento_id);
+      if (params.trabajador_id) queryParams.append('trabajador_id', params.trabajador_id);
+      
+      // Llamar al endpoint específico de retardos y faltas
+      const response = await axiosInstance.get(`/reportes/retardos-faltas?${queryParams.toString()}`);
+      
+      console.log('📥 Datos del reporte recibidos:', response.data);
+      
+      // Si el backend no devuelve el formato esperado, adaptarlo
+      if (!response.data.trabajadores) {
+        // Intentar con endpoint de asistencias mensuales como fallback
+        const fechaInicio = new Date(params.fecha_inicio);
+        const fechaFin = new Date(params.fecha_fin);
+        
+        const responseFallback = await axiosInstance.get('/reportes/asistencias-mensuales', { 
+          params: {
+            anio: fechaInicio.getFullYear(),
+            mes: fechaInicio.getMonth() + 1,
+            departamento_id: params.departamento_id
+          }
+        });
+        
+        // Adaptar la respuesta al formato esperado
+        const dataAdaptada = {
+          fecha_inicio: params.fecha_inicio,
+          fecha_fin: params.fecha_fin,
+          trabajadores: responseFallback.data.trabajadores || [],
+          resumen: responseFallback.data.resumen || {}
+        };
+        
+        return dataAdaptada;
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reporte de retardos y faltas:', error);
+      
+      // Si el endpoint específico no existe, intentar construir los datos desde otros endpoints
+      if (error.response?.status === 404) {
+        console.log('⚠️ Endpoint no encontrado, construyendo datos desde otros servicios...');
+        
+        try {
+          // Obtener datos de asistencias del período
+          const fechaInicio = new Date(params.fecha_inicio);
+          const fechaFin = new Date(params.fecha_fin);
+          
+          const responseAsistencias = await axiosInstance.get('/reportes/asistencias-mensuales', {
+            params: {
+              anio: fechaInicio.getFullYear(),
+              mes: fechaInicio.getMonth() + 1,
+              departamento_id: params.departamento_id
+            }
+          });
+          
+          // Estructurar los datos en el formato esperado
+          const dataEstructurada = {
+            fecha_inicio: params.fecha_inicio,
+            fecha_fin: params.fecha_fin,
+            trabajadores: responseAsistencias.data.trabajadores || [],
+            resumen: {
+              total_trabajadores: responseAsistencias.data.trabajadores?.length || 0,
+              total_retardos: 0,
+              total_faltas: 0
+            }
+          };
+          
+          // Calcular totales
+          if (dataEstructurada.trabajadores.length > 0) {
+            dataEstructurada.resumen.total_retardos = dataEstructurada.trabajadores.reduce(
+              (sum, t) => sum + (t.estadisticas?.retardos || 0), 0
+            );
+            dataEstructurada.resumen.total_faltas = dataEstructurada.trabajadores.reduce(
+              (sum, t) => sum + (t.estadisticas?.faltas || 0), 0
+            );
+          }
+          
+          return dataEstructurada;
+        } catch (fallbackError) {
+          console.error('❌ Error en fallback:', fallbackError);
+          throw fallbackError;
+        }
+      }
+      
       throw error;
     }
   },
@@ -1026,6 +1122,7 @@ const reinitializeAxios = () => {
   console.log('✅ Axios reinicializado correctamente');
 };
 
+// Exportar todos los servicios y utilidades
 export {
   authService,
   trabajadorService,

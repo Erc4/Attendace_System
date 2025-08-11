@@ -55,14 +55,14 @@ def get_reporte_asistencias_diarias(
     for trabajador in trabajadores:
         # Buscar registro de asistencia para este trabajador en la fecha indicada
         asistencia = db.query(RegistroAsistencia).filter(
-            RegistroAsistencia.id_empleado == trabajador.id,
+            RegistroAsistencia.id_trabajador == trabajador.id,
             RegistroAsistencia.fecha >= fecha_inicio,
             RegistroAsistencia.fecha <= fecha_fin
         ).first()
         
         # Buscar justificación para este trabajador en la fecha indicada
         justificacion = db.query(Justificacion).filter(
-            Justificacion.id_empleado == trabajador.id,
+            Justificacion.id_trabajador == trabajador.id,
             Justificacion.fecha >= fecha_inicio,
             Justificacion.fecha <= fecha_fin
         ).first()
@@ -168,14 +168,14 @@ def get_reporte_asistencias_mensuales(
     for trabajador in trabajadores:
         # Obtener todas las asistencias del trabajador para el mes
         asistencias = db.query(RegistroAsistencia).filter(
-            RegistroAsistencia.id_empleado == trabajador.id,
+            RegistroAsistencia.id_trabajador == trabajador.id,
             func.extract('year', RegistroAsistencia.fecha) == anio,
             func.extract('month', RegistroAsistencia.fecha) == mes
         ).all()
         
         # Obtener todas las justificaciones del trabajador para el mes
         justificaciones = db.query(Justificacion).filter(
-            Justificacion.id_empleado == trabajador.id,
+            Justificacion.id_trabajador == trabajador.id,
             func.extract('year', Justificacion.fecha) == anio,
             func.extract('month', Justificacion.fecha) == mes
         ).all()
@@ -377,7 +377,7 @@ def get_reporte_retardos(
     
     # Consulta base para obtener registros de asistencia con retardos
     query = db.query(RegistroAsistencia, Trabajador, Departamento).join(
-        Trabajador, RegistroAsistencia.id_empleado == Trabajador.id
+        Trabajador, RegistroAsistencia.id_trabajador == Trabajador.id
     ).join(
         Departamento, Trabajador.departamento == Departamento.id
     ).filter(
@@ -472,7 +472,7 @@ def get_reporte_faltas(
     
     # Consulta base para obtener registros de asistencia con faltas
     query = db.query(RegistroAsistencia, Trabajador, Departamento).join(
-        Trabajador, RegistroAsistencia.id_empleado == Trabajador.id
+        Trabajador, RegistroAsistencia.id_trabajador == Trabajador.id
     ).join(
         Departamento, Trabajador.departamento == Departamento.id
     ).filter(
@@ -566,7 +566,7 @@ def get_reporte_justificaciones(
     
     # Consulta base para obtener justificaciones
     query = db.query(Justificacion, Trabajador, Departamento, ReglaJustificacion).join(
-        Trabajador, Justificacion.id_empleado == Trabajador.id
+        Trabajador, Justificacion.id_trabajador == Trabajador.id
     ).join(
         Departamento, Trabajador.departamento == Departamento.id
     ).join(
@@ -662,4 +662,144 @@ def get_reporte_justificaciones(
         },
         "justificaciones_por_tipo": tipos_ordenados,
         "justificaciones_por_trabajador": trabajadores_ordenados
+    }
+
+# Agrega este código AL FINAL de tu archivo backend/app/routes/reportes.py
+
+@router.get("/retardos-faltas")
+def get_reporte_retardos_faltas(
+    fecha_inicio: date = Query(..., description="Fecha de inicio del reporte"),
+    fecha_fin: date = Query(..., description="Fecha de fin del reporte"),
+    departamento_id: Optional[int] = Query(None, description="ID del departamento"),
+    trabajador_id: Optional[int] = Query(None, description="ID del trabajador"),
+    db: Session = Depends(get_db)
+):
+    """
+    Genera un reporte específico de retardos y faltas
+    """
+    from datetime import timedelta
+    
+    # Query base de trabajadores
+    query_trabajadores = db.query(Trabajador).filter(Trabajador.estado == True)
+    
+    if departamento_id:
+        query_trabajadores = query_trabajadores.filter(
+            Trabajador.id_departamento == departamento_id
+        )
+    
+    if trabajador_id:
+        query_trabajadores = query_trabajadores.filter(
+            Trabajador.id == trabajador_id
+        )
+    
+    trabajadores = query_trabajadores.all()
+    
+    # Preparar respuesta
+    trabajadores_data = []
+    
+    for trabajador in trabajadores:
+        # Obtener registros del período para este trabajador
+        registros = db.query(RegistroAsistencia).filter(
+            RegistroAsistencia.id_trabajador == trabajador.id,  # USAR id_trabajador, NO id_trabajador
+            RegistroAsistencia.fecha.between(fecha_inicio, fecha_fin)
+        ).order_by(RegistroAsistencia.fecha).all()
+        
+        # Calcular estadísticas
+        dias_laborables = 0
+        asistencias = 0
+        retardos = 0
+        faltas = 0
+        registros_diarios = []
+        
+        # Iterar por cada día del período
+        fecha_actual = fecha_inicio
+        while fecha_actual <= fecha_fin:
+            # Saltar fines de semana (sábado=5, domingo=6)
+            if fecha_actual.weekday() < 5:  # Lunes a Viernes
+                dias_laborables += 1
+                
+                # Buscar registro para este día
+                registro_dia = next(
+                    (r for r in registros if r.fecha == fecha_actual), 
+                    None
+                )
+                
+                if registro_dia:
+                    # Determinar estatus
+                    estatus = "FALTA"
+                    hora_entrada = None
+                    hora_salida = None
+                    
+                    if registro_dia.hora_entrada:
+                        hora_entrada = registro_dia.hora_entrada.strftime("%H:%M")
+                        
+                        # Obtener horario del trabajador (asumiendo 8:00 AM por defecto)
+                        hora_limite = registro_dia.hora_entrada.replace(hour=8, minute=0, second=0)
+                        hora_tolerancia = hora_limite.replace(minute=15)
+                        
+                        if registro_dia.hora_entrada <= hora_limite:
+                            estatus = "ASISTENCIA"
+                            asistencias += 1
+                        elif registro_dia.hora_entrada <= hora_tolerancia:
+                            estatus = "RETARDO"
+                            retardos += 1
+                        else:
+                            estatus = "RETARDO MAYOR"
+                            retardos += 1
+                    else:
+                        faltas += 1
+                    
+                    if registro_dia.hora_salida:
+                        hora_salida = registro_dia.hora_salida.strftime("%H:%M")
+                    
+                    registros_diarios.append({
+                        "fecha": fecha_actual.isoformat(),
+                        "hora_entrada": hora_entrada,
+                        "hora_salida": hora_salida,
+                        "estatus": estatus
+                    })
+                else:
+                    # No hay registro, es falta
+                    faltas += 1
+                    registros_diarios.append({
+                        "fecha": fecha_actual.isoformat(),
+                        "hora_entrada": None,
+                        "hora_salida": None,
+                        "estatus": "FALTA"
+                    })
+            
+            fecha_actual += timedelta(days=1)
+        
+        # Calcular porcentaje de asistencia
+        porcentaje_asistencia = (asistencias / dias_laborables * 100) if dias_laborables > 0 else 0
+        
+        # Obtener información del departamento
+        departamento_nombre = trabajador.departamento.descripcion if trabajador.departamento else "Sin departamento"
+        puesto = trabajador.puesto if trabajador.puesto else "Sin puesto"
+        
+        trabajadores_data.append({
+            "id": trabajador.id,
+            "nombre": f"{trabajador.nombre} {trabajador.apellido_paterno} {trabajador.apellido_materno}",
+            "rfc": trabajador.rfc,
+            "departamento": departamento_nombre,
+            "puesto": puesto,
+            "estadisticas": {
+                "dias_laborables": dias_laborables,
+                "asistencias": asistencias,
+                "retardos": retardos,
+                "faltas": faltas,
+                "porcentaje_asistencia": round(porcentaje_asistencia, 2)
+            },
+            "registros_diarios": registros_diarios
+        })
+    
+    return {
+        "fecha_inicio": fecha_inicio.isoformat(),
+        "fecha_fin": fecha_fin.isoformat(),
+        "trabajadores": trabajadores_data,
+        "resumen": {
+            "total_trabajadores": len(trabajadores_data),
+            "total_retardos": sum(t["estadisticas"]["retardos"] for t in trabajadores_data),
+            "total_faltas": sum(t["estadisticas"]["faltas"] for t in trabajadores_data)
+        }
     }

@@ -27,7 +27,8 @@ import RegistroAsistenciaManual from './components/Asistencias/RegistroAsistenci
 import AsistenciasList from './components/Asistencias/AsistenciasList';
 import ReportesAsistencia from './components/Asistencias/ReportesAsistencia';
 
-
+// Componentes de reportes
+import ReporteRetardosFaltas from './components/Reportes/ReporteRetardosFaltas';
 
 // Página no encontrada
 import NotFound from './pages/NotFound';
@@ -309,6 +310,17 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <ReportesAsistencia />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+
+      <Route 
+        path="/reportes/retardos-faltas" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ReporteRetardosFaltas />
             </Layout>
           </ProtectedRoute>
         } 

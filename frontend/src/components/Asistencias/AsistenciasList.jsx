@@ -42,7 +42,8 @@ import {
   Warning as WarningIcon,
   ErrorOutline as ErrorIcon,
   AccessTime as AccessTimeIcon,
-  FileDownload as DownloadIcon
+  FileDownload as DownloadIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
@@ -70,6 +71,7 @@ const AsistenciasList = () => {
   // Estados para catálogos
   const [departamentos, setDepartamentos] = useState([]);
   const [trabajadores, setTrabajadores] = useState([]);
+  const [trabajadoresMap, setTrabajadoresMap] = useState({});
   
   // Estados para edición
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -80,34 +82,15 @@ const AsistenciasList = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [asistenciaToDelete, setAsistenciaToDelete] = useState(null);
   
-  // Cargar datos al inicializar
+  // Cargar catálogos al inicializar
+  useEffect(() => {
+    fetchCatalogos();
+  }, []);
+  
+  // Cargar asistencias cuando cambien los filtros
   useEffect(() => {
     fetchAsistencias();
-    fetchCatalogos();
-  }, [fechaInicio, fechaFin, searchTerm, estatusFilter, departamentoFilter]);
-  
-  const fetchAsistencias = async () => {
-    try {
-      setLoading(true);
-      const params = {
-        fecha_inicio: fechaInicio.format('YYYY-MM-DD'),
-        fecha_fin: fechaFin.format('YYYY-MM-DD'),
-      };
-      
-      if (searchTerm) params.search = searchTerm;
-      if (estatusFilter) params.estatus = estatusFilter;
-      if (departamentoFilter) params.departamento = departamentoFilter;
-      
-      const data = await asistenciaService.getAll(params);
-      setAsistencias(data);
-      setError(null);
-    } catch (err) {
-      console.error('Error al cargar asistencias:', err);
-      setError('No se pudieron cargar las asistencias.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fechaInicio, fechaFin, estatusFilter, departamentoFilter]);
   
   const fetchCatalogos = async () => {
     try {
@@ -117,10 +100,134 @@ const AsistenciasList = () => {
       ]);
       
       setDepartamentos(deptosData);
-      setTrabajadores(trabajadoresData);
+      
+      // Manejar respuesta de trabajadores (puede venir como array o como objeto)
+      const trabajadoresArray = Array.isArray(trabajadoresData) 
+        ? trabajadoresData 
+        : (trabajadoresData?.trabajadores || []);
+      
+      setTrabajadores(trabajadoresArray);
+      
+      // Crear mapa de trabajadores para búsqueda rápida
+      const map = {};
+      trabajadoresArray.forEach(t => {
+        map[t.id] = t;
+      });
+      setTrabajadoresMap(map);
     } catch (err) {
       console.error('Error al cargar catálogos:', err);
     }
+  };
+  
+  const fetchAsistencias = async () => {
+    try {
+      setLoading(true);
+      
+      // Construir parámetros correctos para el backend
+      const params = {
+        fecha_inicio: fechaInicio.format('YYYY-MM-DD'),
+        fecha_fin: fechaFin.format('YYYY-MM-DD'),
+      };
+      
+      // Solo agregar filtros si tienen valor
+      if (estatusFilter && estatusFilter !== '') {
+        params.estatus = estatusFilter;
+      }
+      
+      console.log('📤 Parámetros de búsqueda:', params);
+      
+      const data = await asistenciaService.getAll(params);
+      console.log('📥 Asistencias recibidas:', data);
+      
+      // Agrupar registros por trabajador y fecha
+      const registrosAgrupados = {};
+      
+      data.forEach(asistencia => {
+        const fecha = dayjs(asistencia.fecha).format('YYYY-MM-DD');
+        const key = `${asistencia.id_trabajador}-${fecha}`;
+        
+        if (!registrosAgrupados[key]) {
+          registrosAgrupados[key] = {
+            trabajadorId: asistencia.id_trabajador,
+            fecha: fecha,
+            registros: []
+          };
+        }
+        
+        registrosAgrupados[key].registros.push(asistencia);
+      });
+      
+      // Procesar cada grupo para obtener solo entrada y salida
+      const asistenciasProcesadas = [];
+      
+      Object.values(registrosAgrupados).forEach(grupo => {
+        // Ordenar registros por hora
+        grupo.registros.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+        
+        // Buscar primer registro que no sea SALIDA (entrada)
+        const entrada = grupo.registros.find(r => r.estatus !== 'SALIDA');
+        
+        // Buscar último registro que sea SALIDA
+        const salida = grupo.registros.reverse().find(r => r.estatus === 'SALIDA');
+        
+        // Agregar entrada si existe
+        if (entrada) {
+          asistenciasProcesadas.push({
+            ...entrada,
+            tipo_registro: 'ENTRADA'
+          });
+        }
+        
+        // Agregar salida si existe y es diferente de la entrada
+        if (salida && (!entrada || salida.id !== entrada.id)) {
+          asistenciasProcesadas.push({
+            ...salida,
+            tipo_registro: 'SALIDA'
+          });
+        }
+      });
+      
+      // Ordenar por fecha descendente
+      asistenciasProcesadas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      
+      // Aplicar filtros adicionales
+      let asistenciasFiltradas = asistenciasProcesadas;
+      
+      // Filtro por nombre de trabajador
+      if (searchTerm) {
+        asistenciasFiltradas = asistenciasFiltradas.filter(asistencia => {
+          const trabajador = trabajadoresMap[asistencia.id_trabajador];
+          if (!trabajador) return false;
+          
+          const nombreCompleto = `${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}`.toLowerCase();
+          const rfc = trabajador.rfc?.toLowerCase() || '';
+          const termino = searchTerm.toLowerCase();
+          
+          return nombreCompleto.includes(termino) || rfc.includes(termino);
+        });
+      }
+      
+      // Filtro por departamento
+      if (departamentoFilter && departamentoFilter !== '') {
+        asistenciasFiltradas = asistenciasFiltradas.filter(asistencia => {
+          const trabajador = trabajadoresMap[asistencia.id_trabajador];
+          return trabajador && trabajador.departamento == departamentoFilter;
+        });
+      }
+      
+      setAsistencias(asistenciasFiltradas);
+      setError(null);
+    } catch (err) {
+      console.error('❌ Error al cargar asistencias:', err);
+      setError('No se pudieron cargar las asistencias.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Función para búsqueda manual
+  const handleSearchClick = () => {
+    fetchAsistencias();
   };
   
   // Funciones para paginación
@@ -198,6 +305,7 @@ const AsistenciasList = () => {
   // Obtener color del chip según estatus
   const getChipColor = (estatus) => {
     if (estatus === 'ASISTENCIA') return 'success';
+    if (estatus === 'SALIDA') return 'info';
     if (estatus.includes('RETARDO')) return 'warning';
     if (estatus === 'FALTA') return 'error';
     if (estatus === 'JUSTIFICADO') return 'info';
@@ -207,6 +315,7 @@ const AsistenciasList = () => {
   // Obtener icono según estatus
   const getStatusIcon = (estatus) => {
     if (estatus === 'ASISTENCIA') return <CheckCircleIcon />;
+    if (estatus === 'SALIDA') return <AccessTimeIcon />;
     if (estatus.includes('RETARDO')) return <WarningIcon />;
     if (estatus === 'FALTA') return <ErrorIcon />;
     if (estatus === 'JUSTIFICADO') return <AccessTimeIcon />;
@@ -215,7 +324,7 @@ const AsistenciasList = () => {
   
   // Encontrar trabajador por ID
   const findTrabajador = (id) => {
-    return trabajadores.find(t => t.id === id) || {};
+    return trabajadoresMap[id] || {};
   };
   
   // Obtener asistencias paginadas
@@ -225,11 +334,12 @@ const AsistenciasList = () => {
   );
   
   const estatusOptions = [
-    'ASISTENCIA',
-    'RETARDO_MENOR',
-    'RETARDO_MAYOR', 
-    'FALTA',
-    'JUSTIFICADO'
+    { value: 'ASISTENCIA', label: 'Asistencia' },
+    { value: 'RETARDO_MENOR', label: 'Retardo Menor' },
+    { value: 'RETARDO_MAYOR', label: 'Retardo Mayor' },
+    { value: 'FALTA', label: 'Falta' },
+    { value: 'SALIDA', label: 'Salida' },
+    { value: 'JUSTIFICADO', label: 'Justificado' }
   ];
   
   return (
@@ -244,7 +354,7 @@ const AsistenciasList = () => {
       </Box>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -254,12 +364,13 @@ const AsistenciasList = () => {
         <Typography variant="h6" gutterBottom>
           Filtros de Búsqueda
         </Typography>
+        
         <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
-          <Grid container spacing={3}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
-                label="Buscar trabajador"
+                label="Buscar por nombre o RFC"
                 variant="outlined"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -270,7 +381,11 @@ const AsistenciasList = () => {
                     </InputAdornment>
                   ),
                 }}
-                placeholder="Nombre o RFC"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSearchClick();
+                  }
+                }}
               />
             </Grid>
             
@@ -279,9 +394,10 @@ const AsistenciasList = () => {
                 label="Fecha Inicio"
                 value={fechaInicio}
                 onChange={(newValue) => setFechaInicio(newValue)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true
+                slotProps={{ 
+                  textField: { 
+                    fullWidth: true,
+                    variant: 'outlined'
                   }
                 }}
               />
@@ -292,9 +408,10 @@ const AsistenciasList = () => {
                 label="Fecha Fin"
                 value={fechaFin}
                 onChange={(newValue) => setFechaFin(newValue)}
-                slotProps={{
-                  textField: {
-                    fullWidth: true
+                slotProps={{ 
+                  textField: { 
+                    fullWidth: true,
+                    variant: 'outlined'
                   }
                 }}
               />
@@ -304,14 +421,24 @@ const AsistenciasList = () => {
               <FormControl fullWidth>
                 <InputLabel>Estado</InputLabel>
                 <Select
-                  value={estatusFilter || "Todos"} // Valor por defecto
+                  value={estatusFilter}
                   onChange={(e) => setEstatusFilter(e.target.value)}
                   label="Estado"
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected === '') {
+                      return <em>Todos</em>;
+                    }
+                    return estatusOptions.find(opt => opt.value === selected)?.label || selected;
+                  }}
+                  sx={{ minHeight: '56px' }}
                 >
-                  <MenuItem value="Todos">Todos</MenuItem>
-                  {estatusOptions.map((estatus) => (
-                    <MenuItem key={estatus} value={estatus}>
-                      {estatus}
+                  <MenuItem value="">
+                    <em>Todos los estados</em>
+                  </MenuItem>
+                  {estatusOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
                     </MenuItem>
                   ))}
                 </Select>
@@ -322,11 +449,21 @@ const AsistenciasList = () => {
               <FormControl fullWidth>
                 <InputLabel>Departamento</InputLabel>
                 <Select
-                  value={departamentoFilter || "Todos"} // Valor por defecto
+                  value={departamentoFilter}
                   onChange={(e) => setDepartamentoFilter(e.target.value)}
                   label="Departamento"
+                  displayEmpty
+                  renderValue={(selected) => {
+                    if (!selected || selected === '') {
+                      return <em>Todos</em>;
+                    }
+                    return departamentos.find(d => d.id == selected)?.descripcion || 'Todos';
+                  }}
+                  sx={{ minHeight: '56px' }}
                 >
-                  <MenuItem value="Todos">Todos los departamentos</MenuItem>
+                  <MenuItem value="">
+                    <em>Todos los departamentos</em>
+                  </MenuItem>
                   {departamentos.map((dept) => (
                     <MenuItem key={dept.id} value={dept.id}>
                       {dept.descripcion}
@@ -340,61 +477,30 @@ const AsistenciasList = () => {
               <Button
                 fullWidth
                 variant="contained"
-                component={RouterLink}
-                to="/asistencias/registro"
-                startIcon={<AddIcon />}
+                onClick={handleSearchClick}
+                startIcon={<RefreshIcon />}
                 sx={{ height: '56px' }}
               >
-                Nuevo
+                Buscar
               </Button>
             </Grid>
           </Grid>
         </LocalizationProvider>
+        
+        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            {asistencias.length} registros encontrados
+          </Typography>
+          <Button
+            variant="contained"
+            component={RouterLink}
+            to="/asistencias/registro"
+            startIcon={<AddIcon />}
+          >
+            Nuevo Registro
+          </Button>
+        </Box>
       </Paper>
-      
-      {/* Estadísticas rápidas */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={6} sm={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
-                {asistencias.length}
-              </Typography>
-              <Typography variant="body2">Total Registros</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="success.main">
-                {asistencias.filter(a => a.estatus === 'ASISTENCIA').length}
-              </Typography>
-              <Typography variant="body2">Asistencias</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="warning.main">
-                {asistencias.filter(a => a.estatus.includes('RETARDO')).length}
-              </Typography>
-              <Typography variant="body2">Retardos</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="error.main">
-                {asistencias.filter(a => a.estatus === 'FALTA').length}
-              </Typography>
-              <Typography variant="body2">Faltas</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
       
       {/* Tabla de asistencias */}
       {loading ? (
@@ -428,6 +534,7 @@ const AsistenciasList = () => {
                 <TableCell>Trabajador</TableCell>
                 <TableCell>Fecha</TableCell>
                 <TableCell>Hora</TableCell>
+                <TableCell>Tipo</TableCell>
                 <TableCell>Estado</TableCell>
                 <TableCell>Departamento</TableCell>
                 <TableCell align="right">Acciones</TableCell>
@@ -436,6 +543,7 @@ const AsistenciasList = () => {
             <TableBody>
               {paginatedAsistencias.map((asistencia) => {
                 const trabajador = findTrabajador(asistencia.id_trabajador);
+                
                 return (
                   <TableRow key={asistencia.id} hover>
                     <TableCell>
@@ -446,12 +554,12 @@ const AsistenciasList = () => {
                         <Box>
                           <Typography variant="subtitle2">
                             {trabajador.nombre ? 
-                              `${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}` :
-                              `Trabajador ID: ${asistencia.id_trabajador}`
+                              `${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}` 
+                              : 'Trabajador Desconocido'
                             }
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {trabajador.rfc || 'RFC no disponible'}
+                            RFC: {trabajador.rfc || 'N/A'}
                           </Typography>
                         </Box>
                       </Box>
@@ -464,27 +572,39 @@ const AsistenciasList = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        icon={getStatusIcon(asistencia.estatus)}
+                        label={asistencia.tipo_registro || (asistencia.estatus === 'SALIDA' ? 'SALIDA' : 'ENTRADA')}
+                        size="small"
+                        color={asistencia.tipo_registro === 'SALIDA' || asistencia.estatus === 'SALIDA' ? 'info' : 'success'}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
                         label={asistencia.estatus}
                         color={getChipColor(asistencia.estatus)}
+                        icon={getStatusIcon(asistencia.estatus)}
                         size="small"
                       />
                     </TableCell>
-                    <TableCell>{trabajador.departamento || 'N/A'}</TableCell>
+                    <TableCell>
+                      {trabajador.departamento ? 
+                        departamentos.find(d => d.id === trabajador.departamento)?.descripcion || 'N/A'
+                        : 'N/A'
+                      }
+                    </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        color="primary"
+                      <IconButton 
+                        size="small" 
                         onClick={() => handleEditClick(asistencia)}
-                        title="Editar registro"
+                        title="Editar"
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton
-                        size="small"
-                        color="error"
+                      <IconButton 
+                        size="small" 
                         onClick={() => handleDeleteClick(asistencia)}
-                        title="Eliminar registro"
+                        color="error"
+                        title="Eliminar"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
@@ -494,6 +614,7 @@ const AsistenciasList = () => {
               })}
             </TableBody>
           </Table>
+          
           <TablePagination
             rowsPerPageOptions={[5, 10, 25, 50]}
             component="div"
@@ -502,8 +623,7 @@ const AsistenciasList = () => {
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Filas por página"
-            labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+            labelRowsPerPage="Registros por página:"
           />
         </TableContainer>
       )}
@@ -512,99 +632,80 @@ const AsistenciasList = () => {
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Editar Registro de Asistencia</DialogTitle>
         <DialogContent>
-          {asistenciaToEdit && (
-            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
-              <Box sx={{ pt: 2 }}>
-                <Grid container spacing={3}>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Trabajador: {(() => {
-                        const trabajador = findTrabajador(asistenciaToEdit.id_trabajador);
-                        return trabajador.nombre ? 
-                          `${trabajador.nombre} ${trabajador.apellidoPaterno} ${trabajador.apellidoMaterno}` :
-                          `ID: ${asistenciaToEdit.id_trabajador}`;
-                      })()}
-                    </Typography>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
-                    <DatePicker
-                      label="Fecha"
-                      value={asistenciaToEdit.fecha}
-                      onChange={(newValue) => setAsistenciaToEdit({
-                        ...asistenciaToEdit,
-                        fecha: newValue
-                      })}
-                      slotProps={{
-                        textField: { fullWidth: true }
-                      }}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
-                    <TimePicker
-                      label="Hora"
-                      value={asistenciaToEdit.hora}
-                      onChange={(newValue) => setAsistenciaToEdit({
-                        ...asistenciaToEdit,
-                        hora: newValue
-                      })}
-                      ampm={false}
-                      slotProps={{
-                        textField: { fullWidth: true }
-                      }}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <FormControl fullWidth>
-                      <InputLabel>Estado</InputLabel>
-                      <Select
-                        value={asistenciaToEdit.estatus}
-                        onChange={(e) => setAsistenciaToEdit({
-                          ...asistenciaToEdit,
-                          estatus: e.target.value
-                        })}
-                        label="Estado"
-                      >
-                        {estatusOptions.map((estatus) => (
-                          <MenuItem key={estatus} value={estatus}>
-                            {estatus}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              </Box>
-            </LocalizationProvider>
-          )}
+          <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <DatePicker
+                  label="Fecha"
+                  value={asistenciaToEdit?.fecha}
+                  onChange={(newValue) => 
+                    setAsistenciaToEdit({...asistenciaToEdit, fecha: newValue})
+                  }
+                  slotProps={{ 
+                    textField: { 
+                      fullWidth: true,
+                      variant: 'outlined'
+                    }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TimePicker
+                  label="Hora"
+                  value={asistenciaToEdit?.hora}
+                  onChange={(newValue) => 
+                    setAsistenciaToEdit({...asistenciaToEdit, hora: newValue})
+                  }
+                  ampm={false}
+                  views={['hours', 'minutes', 'seconds']}
+                  format="HH:mm:ss"
+                  slotProps={{ 
+                    textField: { 
+                      fullWidth: true,
+                      variant: 'outlined'
+                    }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Estado</InputLabel>
+                  <Select
+                    value={asistenciaToEdit?.estatus || ''}
+                    onChange={(e) => 
+                      setAsistenciaToEdit({...asistenciaToEdit, estatus: e.target.value})
+                    }
+                    label="Estado"
+                  >
+                    {estatusOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </LocalizationProvider>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
-          <Button
-            onClick={handleEditSave}
-            variant="contained"
+          <Button 
+            onClick={handleEditSave} 
+            variant="contained" 
             disabled={editLoading}
-            startIcon={editLoading ? <CircularProgress size={20} /> : <EditIcon />}
+            startIcon={editLoading ? <CircularProgress size={20} /> : null}
           >
-            {editLoading ? 'Guardando...' : 'Guardar Cambios'}
+            {editLoading ? 'Guardando...' : 'Guardar'}
           </Button>
         </DialogActions>
       </Dialog>
       
       {/* Diálogo de confirmación de eliminación */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>¿Eliminar registro de asistencia?</DialogTitle>
+        <DialogTitle>Confirmar Eliminación</DialogTitle>
         <DialogContent>
-          {asistenciaToDelete && (
-            <Typography>
-              ¿Estás seguro de que deseas eliminar el registro de asistencia del{' '}
-              {dayjs(asistenciaToDelete.fecha).format('DD/MM/YYYY [a las] HH:mm')}?
-              <br />
-              <strong>Esta acción no se puede deshacer.</strong>
-            </Typography>
-          )}
+          ¿Estás seguro de que deseas eliminar este registro de asistencia?
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
