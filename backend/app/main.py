@@ -37,7 +37,7 @@ app.include_router(trabajadores.router, prefix="/api", tags=["Trabajadores"])
 app.include_router(asistencia.router, prefix="/api", tags=["Asistencias"])
 app.include_router(justificaciones.router, prefix="/api", tags=["Justificaciones"])
 app.include_router(horarios.router, prefix="/api", tags=["Horarios"])
-app.include_router(reportes.router, prefix="/api", tags=["Reportes"])
+app.include_router(reportes.router, prefix="/api/reportes", tags=["reportes"])
 app.include_router(catalogos.router, prefix="/api", tags=["Catálogos"])
 
 @app.get("/")

@@ -625,86 +625,148 @@ const reporteService = {
       if (params.departamento_id) queryParams.append('departamento_id', params.departamento_id);
       if (params.trabajador_id) queryParams.append('trabajador_id', params.trabajador_id);
       
-      // Llamar al endpoint específico de retardos y faltas
-      const response = await axiosInstance.get(`/reportes/retardos-faltas?${queryParams.toString()}`);
-      
-      console.log('📥 Datos del reporte recibidos:', response.data);
-      
-      // Si el backend no devuelve el formato esperado, adaptarlo
-      if (!response.data.trabajadores) {
-        // Intentar con endpoint de asistencias mensuales como fallback
-        const fechaInicio = new Date(params.fecha_inicio);
-        const fechaFin = new Date(params.fecha_fin);
-        
-        const responseFallback = await axiosInstance.get('/reportes/asistencias-mensuales', { 
-          params: {
-            anio: fechaInicio.getFullYear(),
-            mes: fechaInicio.getMonth() + 1,
-            departamento_id: params.departamento_id
-          }
-        });
-        
-        // Adaptar la respuesta al formato esperado
-        const dataAdaptada = {
-          fecha_inicio: params.fecha_inicio,
-          fecha_fin: params.fecha_fin,
-          trabajadores: responseFallback.data.trabajadores || [],
-          resumen: responseFallback.data.resumen || {}
-        };
-        
-        return dataAdaptada;
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al obtener reporte de retardos y faltas:', error);
-      
-      // Si el endpoint específico no existe, intentar construir los datos desde otros endpoints
-      if (error.response?.status === 404) {
-        console.log('⚠️ Endpoint no encontrado, construyendo datos desde otros servicios...');
-        
-        try {
-          // Obtener datos de asistencias del período
+      // Intentar primero con el endpoint específico
+      try {
+        const response = await axiosInstance.get(`/reportes/retardos-faltas?${queryParams.toString()}`);
+        console.log('📥 Datos del reporte recibidos:', response.data);
+        return response.data;
+      } catch (error) {
+        // Si el endpoint no existe (404), usar asistencias-mensuales como fallback
+        if (error.response?.status === 404) {
+          console.log('⚠️ Endpoint retardos-faltas no encontrado, usando fallback...');
+          
+          // IMPORTANTE: Procesar las fechas para obtener datos del período completo
           const fechaInicio = new Date(params.fecha_inicio);
           const fechaFin = new Date(params.fecha_fin);
           
+          // Obtener todos los meses necesarios
+          const mesesRequeridos = [];
+          let fechaActual = new Date(fechaInicio);
+          
+          while (fechaActual <= fechaFin) {
+            mesesRequeridos.push({
+              anio: fechaActual.getFullYear(),
+              mes: fechaActual.getMonth() + 1
+            });
+            
+            // Avanzar al siguiente mes
+            fechaActual.setMonth(fechaActual.getMonth() + 1);
+            
+            // Evitar bucle infinito
+            if (mesesRequeridos.length > 12) break;
+          }
+          
+          // Si es un solo mes o fechas del mismo mes
+          if (mesesRequeridos.length === 1 || 
+              (fechaInicio.getMonth() === fechaFin.getMonth() && 
+               fechaInicio.getFullYear() === fechaFin.getFullYear())) {
+            
+            // Obtener datos del mes
+            const responseAsistencias = await axiosInstance.get('/reportes/asistencias-mensuales', {
+              params: {
+                anio: fechaInicio.getFullYear(),
+                mes: fechaInicio.getMonth() + 1,
+                departamento_id: params.departamento_id
+              }
+            });
+            
+            // FILTRAR los datos según las fechas seleccionadas
+            const dataFiltrada = {
+              fecha_inicio: params.fecha_inicio,
+              fecha_fin: params.fecha_fin,
+              trabajadores: []
+            };
+            
+            // Filtrar registros diarios por fecha
+            if (responseAsistencias.data.trabajadores) {
+              dataFiltrada.trabajadores = responseAsistencias.data.trabajadores.map(trabajador => {
+                // Filtrar solo los registros dentro del rango de fechas
+                const registrosFiltrados = trabajador.registros_diarios ? 
+                  trabajador.registros_diarios.filter(registro => {
+                    const fechaRegistro = new Date(registro.fecha);
+                    return fechaRegistro >= fechaInicio && fechaRegistro <= fechaFin;
+                  }) : [];
+                
+                // Recalcular estadísticas basadas en los registros filtrados
+                const estadisticasRecalculadas = {
+                  dias_laborables: 0,
+                  asistencias: 0,
+                  retardos: 0,
+                  faltas: 0,
+                  porcentaje_asistencia: 0
+                };
+                
+                // Contar días laborables en el período seleccionado
+                let fecha = new Date(fechaInicio);
+                while (fecha <= fechaFin) {
+                  // Si es día laboral (lunes a viernes)
+                  if (fecha.getDay() !== 0 && fecha.getDay() !== 6) {
+                    estadisticasRecalculadas.dias_laborables++;
+                  }
+                  fecha.setDate(fecha.getDate() + 1);
+                }
+                
+                // Recalcular estadísticas desde los registros filtrados
+                registrosFiltrados.forEach(registro => {
+                  if (registro.estatus === 'ASISTENCIA') {
+                    estadisticasRecalculadas.asistencias++;
+                  } else if (registro.estatus && registro.estatus.includes('RETARDO')) {
+                    estadisticasRecalculadas.retardos++;
+                  } else if (registro.estatus === 'FALTA') {
+                    estadisticasRecalculadas.faltas++;
+                  }
+                });
+                
+                // Calcular porcentaje
+                if (estadisticasRecalculadas.dias_laborables > 0) {
+                  estadisticasRecalculadas.porcentaje_asistencia = 
+                    (estadisticasRecalculadas.asistencias / estadisticasRecalculadas.dias_laborables) * 100;
+                }
+                
+                return {
+                  ...trabajador,
+                  registros_diarios: registrosFiltrados,
+                  estadisticas: estadisticasRecalculadas
+                };
+              });
+            }
+            
+            // Agregar resumen
+            dataFiltrada.resumen = {
+              total_trabajadores: dataFiltrada.trabajadores.length,
+              total_retardos: dataFiltrada.trabajadores.reduce((sum, t) => sum + t.estadisticas.retardos, 0),
+              total_faltas: dataFiltrada.trabajadores.reduce((sum, t) => sum + t.estadisticas.faltas, 0)
+            };
+            
+            console.log('✅ Datos filtrados por fecha:', dataFiltrada);
+            return dataFiltrada;
+          }
+          
+          // Si son múltiples meses, combinar los datos
+          console.log('📅 Período abarca múltiples meses, combinando datos...');
+          
+          // Por ahora, usar el primer mes como fallback simple
+          const primerMes = mesesRequeridos[0];
           const responseAsistencias = await axiosInstance.get('/reportes/asistencias-mensuales', {
             params: {
-              anio: fechaInicio.getFullYear(),
-              mes: fechaInicio.getMonth() + 1,
+              anio: primerMes.anio,
+              mes: primerMes.mes,
               departamento_id: params.departamento_id
             }
           });
           
-          // Estructurar los datos en el formato esperado
-          const dataEstructurada = {
+          return {
             fecha_inicio: params.fecha_inicio,
             fecha_fin: params.fecha_fin,
             trabajadores: responseAsistencias.data.trabajadores || [],
-            resumen: {
-              total_trabajadores: responseAsistencias.data.trabajadores?.length || 0,
-              total_retardos: 0,
-              total_faltas: 0
-            }
+            resumen: responseAsistencias.data.resumen || {}
           };
-          
-          // Calcular totales
-          if (dataEstructurada.trabajadores.length > 0) {
-            dataEstructurada.resumen.total_retardos = dataEstructurada.trabajadores.reduce(
-              (sum, t) => sum + (t.estadisticas?.retardos || 0), 0
-            );
-            dataEstructurada.resumen.total_faltas = dataEstructurada.trabajadores.reduce(
-              (sum, t) => sum + (t.estadisticas?.faltas || 0), 0
-            );
-          }
-          
-          return dataEstructurada;
-        } catch (fallbackError) {
-          console.error('❌ Error en fallback:', fallbackError);
-          throw fallbackError;
         }
+        
+        throw error;
       }
-      
+    } catch (error) {
+      console.error('❌ Error al obtener reporte de retardos y faltas:', error);
       throw error;
     }
   },
