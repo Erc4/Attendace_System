@@ -513,8 +513,7 @@ const handleGenerarPDF = async () => {
         currentItem++;
       }
     });
-    
-    // Agregar texto legal de SEP
+        // Agregar texto legal de SEP
     yPosition += 10;
     pdf.setDrawColor(200, 200, 200);
     pdf.setLineWidth(0.3);
