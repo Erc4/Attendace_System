@@ -487,7 +487,7 @@ def get_reporte_retardos_faltas(
     db: Session = Depends(get_db)
 ):
     """
-    Genera reporte de retardos y faltas - CORREGIDO PARA TUS MODELOS
+    Genera reporte de retardos y faltas - VERSIÓN CORREGIDA PARA TU SISTEMA
     """
     print(f"🔍 DEBUG: Iniciando reporte de {fecha_inicio} a {fecha_fin}")
     
@@ -497,7 +497,7 @@ def get_reporte_retardos_faltas(
         
         if departamento_id:
             query_trabajadores = query_trabajadores.filter(
-                Trabajador.departamento == departamento_id  # Nota: es 'departamento', no 'id_departamento'
+                Trabajador.departamento == departamento_id
             )
         
         if trabajador_id:
@@ -511,14 +511,25 @@ def get_reporte_retardos_faltas(
         trabajadores_data = []
         
         for trabajador in trabajadores:
-            # Obtener registros de la tabla registroAsistencia
+            # Obtener TODOS los registros del período
+            fecha_inicio_dt = datetime.combine(fecha_inicio, time.min)
+            fecha_fin_dt = datetime.combine(fecha_fin, time.max)
+            
             registros = db.query(RegistroAsistencia).filter(
                 RegistroAsistencia.id_trabajador == trabajador.id,
-                func.date(RegistroAsistencia.fecha) >= fecha_inicio,
-                func.date(RegistroAsistencia.fecha) <= fecha_fin
+                RegistroAsistencia.fecha >= fecha_inicio_dt,
+                RegistroAsistencia.fecha <= fecha_fin_dt
             ).order_by(RegistroAsistencia.fecha).all()
             
-            print(f"🔍 DEBUG: Trabajador {trabajador.nombre} tiene {len(registros)} registros")
+            print(f"🔍 DEBUG: Trabajador {trabajador.nombre} tiene {len(registros)} registros totales")
+            
+            # Agrupar registros por día
+            registros_por_dia = {}
+            for registro in registros:
+                fecha_key = registro.fecha.date()
+                if fecha_key not in registros_por_dia:
+                    registros_por_dia[fecha_key] = []
+                registros_por_dia[fecha_key].append(registro)
             
             # Inicializar contadores
             dias_laborables = 0
@@ -527,15 +538,7 @@ def get_reporte_retardos_faltas(
             retardos_menores = 0
             retardos_mayores = 0
             faltas = 0
-            total_minutos_retardo = 0
             registros_diarios = []
-            
-            # Obtener horario del trabajador si existe
-            hora_entrada_esperada = time(8, 0, 0)  # Por defecto 8:00 AM
-            if trabajador.id_horario and trabajador.horario_rel:
-                # Aquí podrías obtener el horario específico del día
-                # Por ahora usamos lunes como referencia
-                hora_entrada_esperada = trabajador.horario_rel.lunesEntrada
             
             # Iterar por cada día del período
             fecha_actual = fecha_inicio
@@ -546,62 +549,51 @@ def get_reporte_retardos_faltas(
                 if dia_semana < 5:
                     dias_laborables += 1
                     
-                    # Buscar registro para este día
-                    registro_dia = None
-                    for reg in registros:
-                        # Comparar solo la fecha (sin hora)
-                        if reg.fecha.date() == fecha_actual:
-                            registro_dia = reg
-                            break
+                    # Obtener registros del día
+                    registros_del_dia = registros_por_dia.get(fecha_actual, [])
                     
+                    # Buscar entrada y salida
+                    entrada = None
+                    salida = None
+                    
+                    for registro in registros_del_dia:
+                        # El primer registro que NO sea SALIDA es la entrada
+                        if registro.estatus != "SALIDA" and not entrada:
+                            entrada = registro
+                        # Buscar registro de SALIDA
+                        elif registro.estatus == "SALIDA":
+                            salida = registro
+                    
+                    # Determinar estatus y horas
                     hora_entrada_str = None
                     hora_salida_str = None
                     estatus_dia = "FALTA"
-                    minutos_retardo_dia = 0
                     justificacion = None
                     
-                    if registro_dia:
-                        # Usar el estatus que ya viene de la base de datos
-                        estatus_dia = registro_dia.estatus
+                    if entrada:
+                        # Extraer hora de entrada del campo fecha
+                        hora_entrada_str = entrada.fecha.strftime("%H:%M:%S")
+                        estatus_dia = entrada.estatus
                         
-                        # Extraer hora de entrada si existe
-                        if registro_dia.fecha:
-                            hora_entrada_str = registro_dia.fecha.strftime("%H:%M:%S")
-                            
-                            # Calcular si es retardo basándose en la hora
-                            hora_entrada_real = registro_dia.fecha.time()
-                            hora_tolerancia = time(8, 15, 0)  # 15 minutos de tolerancia
-                            
-                            if hora_entrada_real <= hora_entrada_esperada:
-                                estatus_dia = "ASISTENCIA"
-                                asistencias += 1
-                            elif hora_entrada_real <= hora_tolerancia:
-                                estatus_dia = "RETARDO MENOR"
-                                retardos += 1
-                                retardos_menores += 1
-                                # Calcular minutos de retardo
-                                entrada_dt = datetime.combine(fecha_actual, hora_entrada_real)
-                                esperada_dt = datetime.combine(fecha_actual, hora_entrada_esperada)
-                                diff = entrada_dt - esperada_dt
-                                minutos_retardo_dia = int(diff.total_seconds() / 60)
-                                total_minutos_retardo += minutos_retardo_dia
-                            else:
-                                estatus_dia = "RETARDO MAYOR"
-                                retardos += 1
-                                retardos_mayores += 1
-                                entrada_dt = datetime.combine(fecha_actual, hora_entrada_real)
-                                esperada_dt = datetime.combine(fecha_actual, hora_entrada_esperada)
-                                diff = entrada_dt - esperada_dt
-                                minutos_retardo_dia = int(diff.total_seconds() / 60)
-                                total_minutos_retardo += minutos_retardo_dia
-                        
-                        # Si el estatus indica falta
-                        if "FALTA" in estatus_dia.upper():
+                        # Contar según el estatus
+                        if estatus_dia == "ASISTENCIA":
+                            asistencias += 1
+                        elif estatus_dia == "RETARDO_MENOR":
+                            retardos += 1
+                            retardos_menores += 1
+                        elif estatus_dia == "RETARDO_MAYOR":
+                            retardos += 1
+                            retardos_mayores += 1
+                        elif estatus_dia == "FALTA":
                             faltas += 1
                     else:
-                        # No hay registro = falta
+                        # No hay registro de entrada = falta
                         faltas += 1
                         estatus_dia = "FALTA"
+                    
+                    # Si hay salida, extraer la hora
+                    if salida:
+                        hora_salida_str = salida.fecha.strftime("%H:%M:%S")
                     
                     # Buscar justificación
                     justificacion_obj = db.query(Justificacion).filter(
@@ -634,12 +626,13 @@ def get_reporte_retardos_faltas(
                         "fecha": fecha_actual.isoformat(),
                         "dia_semana": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][dia_semana],
                         "hora_entrada": hora_entrada_str,
-                        "hora_salida": hora_salida_str,  # Por ahora null, ajustar si tienes hora de salida
+                        "hora_salida": hora_salida_str,
                         "estatus": estatus_dia,
-                        "minutos_retardo": minutos_retardo_dia,
                         "observaciones": None,
                         "justificacion": justificacion
                     })
+                    
+                    print(f"  📅 {fecha_actual}: Entrada={hora_entrada_str}, Salida={hora_salida_str}, Estatus={estatus_dia}")
                 
                 fecha_actual += timedelta(days=1)
             
@@ -656,15 +649,15 @@ def get_reporte_retardos_faltas(
             # Construir nombre completo
             nombre_completo = f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}".strip()
             
-            # Agregar datos del trabajador
+            # Agregar datos del trabajador (incluso si no tiene retardos/faltas para ver todos)
             trabajadores_data.append({
                 "id": trabajador.id,
                 "nombre": nombre_completo,
                 "rfc": trabajador.rfc,
                 "departamento": departamento_nombre,
                 "puesto": trabajador.puesto,
-                "telefono": "",  # No veo campo telefono en tu modelo
-                "email": trabajador.correo,  # Usas 'correo' no 'email'
+                "telefono": "",
+                "email": trabajador.correo,
                 "estadisticas": {
                     "dias_laborables": dias_laborables,
                     "asistencias": asistencias,
@@ -672,8 +665,7 @@ def get_reporte_retardos_faltas(
                     "retardos_menores": retardos_menores,
                     "retardos_mayores": retardos_mayores,
                     "faltas": faltas,
-                    "porcentaje_asistencia": round(porcentaje_asistencia, 2),
-                    "total_minutos_retardo": total_minutos_retardo
+                    "porcentaje_asistencia": round(porcentaje_asistencia, 2)
                 },
                 "registros_diarios": registros_diarios
             })
@@ -684,30 +676,21 @@ def get_reporte_retardos_faltas(
             reverse=True
         )
         
-        print(f"✅ DEBUG: Generando reporte con {len(trabajadores_data)} trabajadores")
+        print(f"✅ DEBUG: Reporte generado con {len(trabajadores_data)} trabajadores")
         
         # Calcular resumen
-        total_trabajadores = len(trabajadores_data)
-        total_retardos = sum(t["estadisticas"]["retardos"] for t in trabajadores_data)
-        total_faltas = sum(t["estadisticas"]["faltas"] for t in trabajadores_data)
-        promedio_asistencia = 0
-        
-        if total_trabajadores > 0:
-            promedio_asistencia = sum(t["estadisticas"]["porcentaje_asistencia"] for t in trabajadores_data) / total_trabajadores
-        
         return {
             "fecha_inicio": fecha_inicio.isoformat(),
             "fecha_fin": fecha_fin.isoformat(),
             "trabajadores": trabajadores_data,
             "resumen": {
-                "total_trabajadores": total_trabajadores,
-                "total_retardos": total_retardos,
-                "total_retardos_menores": sum(t["estadisticas"]["retardos_menores"] for t in trabajadores_data),
-                "total_retardos_mayores": sum(t["estadisticas"]["retardos_mayores"] for t in trabajadores_data),
-                "total_faltas": total_faltas,
-                "promedio_asistencia": round(promedio_asistencia, 2),
-                "total_minutos_retardo": sum(t["estadisticas"]["total_minutos_retardo"] for t in trabajadores_data),
-                "periodo_dias": (fecha_fin - fecha_inicio).days + 1
+                "total_trabajadores": len(trabajadores_data),
+                "total_retardos": sum(t["estadisticas"]["retardos"] for t in trabajadores_data),
+                "total_faltas": sum(t["estadisticas"]["faltas"] for t in trabajadores_data),
+                "promedio_asistencia": round(
+                    sum(t["estadisticas"]["porcentaje_asistencia"] for t in trabajadores_data) / len(trabajadores_data),
+                    2
+                ) if trabajadores_data else 0
             }
         }
         
