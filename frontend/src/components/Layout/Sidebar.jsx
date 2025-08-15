@@ -159,40 +159,9 @@ const Sidebar = ({ open }) => {
                     color={isActive('/reportes/retardos-faltas') ? 'primary' : 'inherit'} 
                   />
                 </ListItemIcon>
-                <ListItemText primary="Asistencias Mensuales" />
+                <ListItemText primary="Retardos y faltas" />
               </ListItem>
-              
-              <ListItem 
-                button 
-                component={RouterLink} 
-                to="/reportes/retardos" 
-                selected={isActive('/reportes/retardos')}
-                sx={{ pl: 4 }}
-              >
-                <ListItemIcon>
-                  <AccessTimeIcon 
-                    fontSize="small" 
-                    color={isActive('/reportes/retardos') ? 'primary' : 'inherit'} 
-                  />
-                </ListItemIcon>
-                <ListItemText primary="Retardos" />
-              </ListItem>
-              
-              <ListItem 
-                button 
-                component={RouterLink} 
-                to="/reportes/faltas" 
-                selected={isActive('/reportes/faltas')}
-                sx={{ pl: 4 }}
-              >
-                <ListItemIcon>
-                  <EventBusyIcon 
-                    fontSize="small" 
-                    color={isActive('/reportes/faltas') ? 'primary' : 'inherit'} 
-                  />
-                </ListItemIcon>
-                <ListItemText primary="Faltas" />
-              </ListItem>
+          
               
               <ListItem 
                 button 

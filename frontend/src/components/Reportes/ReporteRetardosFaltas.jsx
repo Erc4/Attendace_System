@@ -77,7 +77,13 @@ const ReporteRetardosFaltas = () => {
     firmaDirector: localStorage.getItem('reporteFirmaDirector') || 'Director General',
     firmaRH: localStorage.getItem('reporteFirmaRH') || 'Recursos Humanos',
     colorPrimario: localStorage.getItem('reporteColorPrimario') || '#1976d2',
-    colorSecundario: localStorage.getItem('reporteColorSecundario') || '#f50057'
+    colorSecundario: localStorage.getItem('reporteColorSecundario') || '#f50057',
+    imagenEncabezado: localStorage.getItem('reporteImagenEncabezado') || null,
+    imagenPiePagina: localStorage.getItem('reporteImagenPiePagina') || null,
+    usarImagenEncabezado: localStorage.getItem('reporteUsarImagenEncabezado') === 'true',
+    usarImagenPiePagina: localStorage.getItem('reporteUsarImagenPiePagina') === 'true',
+    alturaEncabezado: parseInt(localStorage.getItem('reporteAlturaEncabezado') || '40'), // altura en mm
+    alturaPiePagina: parseInt(localStorage.getItem('reporteAlturaPiePagina') || '30') // altura en mm
   });
   
   // Referencias para el reporte
@@ -169,7 +175,45 @@ const ReporteRetardosFaltas = () => {
     }
   };
   
+  const handleImagenEncabezadoChange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    // Validar que sea una imagen
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReporteConfig({
+        ...reporteConfig,
+        imagenEncabezado: reader.result
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+};
 
+const handleImagenPiePaginaChange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    // Validar que sea una imagen
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReporteConfig({
+        ...reporteConfig,
+        imagenPiePagina: reader.result
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+};
 
 const handleGenerarPDF = async () => {
   if (!reporteData || !reporteData.trabajadores.length) {
@@ -195,47 +239,68 @@ const handleGenerarPDF = async () => {
     
     lines.forEach(line => {
       pdf.text(line, x, currentY);
-      currentY += fontSize * 0.5; // Espaciado entre líneas
+      currentY += fontSize * 0.5;
     });
     
-    return currentY; // Retorna la posición Y final
+    return currentY;
   };
   
   // Función auxiliar para agregar cabecera
-    const agregarEncabezado = (numeroPagina, totalPaginas) => {
+
+
+ const agregarEncabezado = (numeroPagina, totalPaginas) => {
+    let yPosition = 0;
+    
     // Resetear colores
     pdf.setDrawColor(0, 0, 0);
     pdf.setTextColor(0, 0, 0);
     pdf.setFillColor(255, 255, 255);
     
+    // Si hay imagen de encabezado y está habilitada
+    if (reporteConfig.usarImagenEncabezado && reporteConfig.imagenEncabezado) {
+      try {
+        // Agregar imagen de encabezado
+        // La imagen se estira para cubrir todo el ancho de la página
+        pdf.addImage(
+          reporteConfig.imagenEncabezado, 
+          'PNG', // Formato (puede ser PNG, JPEG, etc.)
+          0, // X: desde el borde izquierdo
+          0, // Y: desde el tope
+          pageWidth, // Ancho: todo el ancho de la página
+          reporteConfig.alturaEncabezado // Alto: personalizable
+        );
+        
+        yPosition = reporteConfig.alturaEncabezado + 5; // Dejar espacio después de la imagen
+        
+      } catch (err) {
+        console.error('Error al agregar imagen de encabezado:', err);
+        // Si falla, usar encabezado de texto
+        yPosition = agregarEncabezadoTexto(numeroPagina, totalPaginas);
+      }
+    } else {
+      // Usar encabezado de texto tradicional
+      yPosition = agregarEncabezadoTexto(numeroPagina, totalPaginas);
+    }
+    
+    return yPosition;
+  };
+  
+  // Función para encabezado de texto (cuando no hay imagen)
+  const agregarEncabezadoTexto = (numeroPagina, totalPaginas) => {
     let yPosition = 15;
     
-    // SECCIÓN IZQUIERDA - Logo o texto personalizable
+    // SECCIÓN IZQUIERDA
     if (reporteConfig.mostrarLogo && reporteConfig.logo) {
       try {
         pdf.addImage(reporteConfig.logo, 'PNG', 15, 10, 25, 25);
       } catch (err) {
-        // Si falla la imagen, poner texto
         pdf.setFontSize(9);
         pdf.setFont(undefined, 'bold');
         pdf.text('SEP', 15, yPosition);
-        pdf.setFont(undefined, 'normal');
-        pdf.setFontSize(7);
-        pdf.text('Secretaría de', 15, yPosition + 4);
-        pdf.text('Educación Pública', 15, yPosition + 8);
       }
-    } else {
-      // Texto por defecto si no hay logo
-      pdf.setFontSize(9);
-      pdf.setFont(undefined, 'bold');
-      pdf.text('SEP', 15, yPosition);
-      pdf.setFont(undefined, 'normal');
-      pdf.setFontSize(7);
-      pdf.text('Secretaría de', 15, yPosition + 4);
-      pdf.text('Educación Pública', 15, yPosition + 8);
     }
     
-    // SECCIÓN CENTRAL - Información de la institución
+    // SECCIÓN CENTRAL
     pdf.setFontSize(12);
     pdf.setFont(undefined, 'bold');
     pdf.setTextColor(0, 0, 0);
@@ -246,12 +311,10 @@ const handleGenerarPDF = async () => {
     pdf.text(reporteConfig.direccion, pageWidth / 2, yPosition + 5, { align: 'center' });
     pdf.text(`${reporteConfig.ciudad}`, pageWidth / 2, yPosition + 9, { align: 'center' });
     
-    // SECCIÓN DERECHA - Folio y fecha
+    // SECCIÓN DERECHA
     pdf.setFontSize(8);
-    pdf.setFont(undefined, 'normal');
     pdf.text(`Folio: ${String(numeroPagina).padStart(4, '0')}`, pageWidth - 15, yPosition, { align: 'right' });
     pdf.text(`Fecha: ${dayjs().format('DD/MM/YYYY')}`, pageWidth - 15, yPosition + 4, { align: 'right' });
-    pdf.text(`Hora: ${dayjs().format('HH:mm')}`, pageWidth - 15, yPosition + 8, { align: 'right' });
     
     // Línea divisoria
     yPosition = 38;
@@ -263,7 +326,47 @@ const handleGenerarPDF = async () => {
   };
   
   // Función auxiliar para agregar pie de página
-     const agregarPiePagina = (numeroPagina, totalPaginas) => {
+
+const agregarPiePagina = (numeroPagina, totalPaginas) => {
+    // Si hay imagen de pie de página y está habilitada
+    if (reporteConfig.usarImagenPiePagina && reporteConfig.imagenPiePagina) {
+      try {
+        // Calcular posición Y para el pie de página
+        const yPosicionPie = pageHeight - reporteConfig.alturaPiePagina;
+        
+        // Agregar imagen de pie de página
+        pdf.addImage(
+          reporteConfig.imagenPiePagina,
+          'PNG', // Formato
+          0, // X: desde el borde izquierdo
+          yPosicionPie, // Y: calculada desde el alto de la página
+          pageWidth, // Ancho: todo el ancho de la página
+          reporteConfig.alturaPiePagina // Alto: personalizable
+        );
+        
+        // Agregar número de página sobre la imagen si es necesario
+        pdf.setTextColor(80, 80, 80);
+        pdf.setFontSize(8);
+        pdf.text(
+          `Página ${numeroPagina} de ${totalPaginas}`,
+          pageWidth / 2,
+          pageHeight - 5,
+          { align: 'center' }
+        );
+        
+      } catch (err) {
+        console.error('Error al agregar imagen de pie de página:', err);
+        // Si falla, usar pie de página de texto
+        agregarPiePaginaTexto(numeroPagina, totalPaginas);
+      }
+    } else {
+      // Usar pie de página de texto tradicional
+      agregarPiePaginaTexto(numeroPagina, totalPaginas);
+    }
+  };
+  
+  // Función para pie de página de texto (cuando no hay imagen)
+  const agregarPiePaginaTexto = (numeroPagina, totalPaginas) => {
     pdf.setTextColor(100, 100, 100);
     pdf.setFontSize(7);
     
@@ -274,22 +377,22 @@ const handleGenerarPDF = async () => {
     
     // Información del pie
     pdf.text(
-      `Página ${numeroPagina} de ${totalPaginas}`, 
-      15, 
+      `Página ${numeroPagina} de ${totalPaginas}`,
+      15,
       pageHeight - 10
     );
     
     pdf.text(
-      'Documento generado por el Sistema de Control de Asistencia', 
-      pageWidth / 2, 
-      pageHeight - 10, 
+      'Documento generado por el Sistema de Control de Asistencia',
+      pageWidth / 2,
+      pageHeight - 10,
       { align: 'center' }
     );
     
     pdf.text(
-      `${dayjs().format('DD/MM/YYYY HH:mm')}`, 
-      pageWidth - 15, 
-      pageHeight - 10, 
+      `${dayjs().format('DD/MM/YYYY HH:mm')}`,
+      pageWidth - 15,
+      pageHeight - 10,
       { align: 'right' }
     );
   };
@@ -881,6 +984,210 @@ const handleGenerarPDF = async () => {
                 )}
               </Box>
             </Grid>
+
+            <Grid item xs={12}>
+  <Divider />
+</Grid>
+
+<Grid item xs={12}>
+  <Typography variant="h6" gutterBottom>
+    Membrete con Imágenes
+  </Typography>
+  <Typography variant="caption" color="text.secondary">
+    Puedes usar imágenes personalizadas para el encabezado y pie de página.
+    Se recomienda usar imágenes en formato PNG con fondo transparente.
+  </Typography>
+</Grid>
+
+{/* Configuración de Encabezado */}
+<Grid item xs={12} md={6}>
+  <FormControl fullWidth>
+    <InputLabel>Usar Imagen de Encabezado</InputLabel>
+    <Select
+      value={reporteConfig.usarImagenEncabezado ? "true" : "false"}
+      onChange={(e) => setReporteConfig({...reporteConfig, usarImagenEncabezado: e.target.value === 'true'})}
+      label="Usar Imagen de Encabezado"
+    >
+      <MenuItem value="false">No, usar texto</MenuItem>
+      <MenuItem value="true">Sí, usar imagen</MenuItem>
+    </Select>
+  </FormControl>
+</Grid>
+
+<Grid item xs={12} md={6}>
+  <TextField
+    fullWidth
+    label="Altura del Encabezado (mm)"
+    type="number"
+    value={reporteConfig.alturaEncabezado}
+    onChange={(e) => setReporteConfig({...reporteConfig, alturaEncabezado: parseInt(e.target.value) || 20})}
+    InputProps={{
+      inputProps: { min: 20, max: 80 }
+    }}
+    helperText="Altura de la imagen del encabezado en milímetros"
+  />
+</Grid>
+
+{reporteConfig.usarImagenEncabezado && (
+  <Grid item xs={12}>
+    <Box>
+      <Button
+        variant="outlined"
+        component="label"
+        startIcon={<ImageIcon />}
+        fullWidth
+      >
+        Cargar Imagen de Encabezado
+        <input
+          type="file"
+          hidden
+          accept="image/*"
+          onChange={handleImagenEncabezadoChange}
+        />
+      </Button>
+      {reporteConfig.imagenEncabezado && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Vista previa del encabezado:
+          </Typography>
+          <Box sx={{ 
+            border: '1px solid #ddd', 
+            borderRadius: 1, 
+            overflow: 'hidden',
+            position: 'relative',
+            width: '100%',
+            height: 100
+          }}>
+            <img 
+              src={reporteConfig.imagenEncabezado} 
+              alt="Encabezado" 
+              style={{ 
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+            <IconButton
+              size="small"
+              sx={{ 
+                position: 'absolute', 
+                top: 5, 
+                right: 5,
+                bgcolor: 'background.paper'
+              }}
+              onClick={() => setReporteConfig({...reporteConfig, imagenEncabezado: null})}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  </Grid>
+)}
+
+{/* Configuración de Pie de Página */}
+<Grid item xs={12} md={6}>
+  <FormControl fullWidth>
+    <InputLabel>Usar Imagen de Pie de Página</InputLabel>
+    <Select
+      value={reporteConfig.usarImagenPiePagina ? "true" : "false"}
+      onChange={(e) => setReporteConfig({...reporteConfig, usarImagenPiePagina: e.target.value === 'true'})}
+      label="Usar Imagen de Pie de Página"
+    >
+      <MenuItem value="false">No, usar texto</MenuItem>
+      <MenuItem value="true">Sí, usar imagen</MenuItem>
+    </Select>
+  </FormControl>
+</Grid>
+
+<Grid item xs={12} md={6}>
+  <TextField
+    fullWidth
+    label="Altura del Pie de Página (mm)"
+    type="number"
+    value={reporteConfig.alturaPiePagina}
+    onChange={(e) => setReporteConfig({...reporteConfig, alturaPiePagina: parseInt(e.target.value) || 20})}
+    InputProps={{
+      inputProps: { min: 15, max: 60 }
+    }}
+    helperText="Altura de la imagen del pie de página en milímetros"
+  />
+</Grid>
+
+{reporteConfig.usarImagenPiePagina && (
+  <Grid item xs={12}>
+    <Box>
+      <Button
+        variant="outlined"
+        component="label"
+        startIcon={<ImageIcon />}
+        fullWidth
+      >
+        Cargar Imagen de Pie de Página
+        <input
+          type="file"
+          hidden
+          accept="image/*"
+          onChange={handleImagenPiePaginaChange}
+        />
+      </Button>
+      {reporteConfig.imagenPiePagina && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Vista previa del pie de página:
+          </Typography>
+          <Box sx={{ 
+            border: '1px solid #ddd', 
+            borderRadius: 1, 
+            overflow: 'hidden',
+            position: 'relative',
+            width: '100%',
+            height: 80
+          }}>
+            <img 
+              src={reporteConfig.imagenPiePagina} 
+              alt="Pie de página" 
+              style={{ 
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+            <IconButton
+              size="small"
+              sx={{ 
+                position: 'absolute', 
+                top: 5, 
+                right: 5,
+                bgcolor: 'background.paper'
+              }}
+              onClick={() => setReporteConfig({...reporteConfig, imagenPiePagina: null})}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  </Grid>
+)}
+
+{/* Nota informativa */}
+<Grid item xs={12}>
+  <Alert severity="info">
+    <Typography variant="body2">
+      <strong>Recomendaciones para las imágenes:</strong>
+    </Typography>
+    <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+      <li>Usa imágenes en alta resolución (mínimo 300 DPI)</li>
+      <li>Formato PNG con fondo transparente para mejor resultado</li>
+      <li>Proporción recomendada: 3:1 para encabezados, 4:1 para pies de página</li>
+      <li>El ancho se ajustará automáticamente al tamaño de la página (carta)</li>
+      <li>Puedes crear tus membretes en Canva, Photoshop o cualquier editor de imágenes</li>
+    </ul>
+  </Alert>
+</Grid>
             
             <Grid item xs={12}>
               <Divider />
