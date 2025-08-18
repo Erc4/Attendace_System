@@ -226,24 +226,56 @@ const handleGenerarPDF = async () => {
   const pageWidth = pdf.internal.pageSize.width;
   
   // Texto legal de SEP
-  const textoLegalSEP = `De conformidad con el Reglamento de las Condiciones Generales de Trabajo del Personal de la Secretaría de Educación Pública, que establece: "La falta del trabajador a sus labores, que no se justifique por medio de licencia legalmente concedida, lo priva del derecho de reclamar el salario correspondiente a la jornada o jornadas de trabajo no desempeñadas" y en virtud de su(s) falta(s) injustificada(s) relacionada(s) en el anverso de este formato, en la(s) plaza(s) asignada(s) para desempeñar sus labores, se le descontará el sueldo correspondiente por no haberlo devengado. Es importante mencionar que cuenta usted con tres días hábiles después de recibir este documento para hacer cualquier aclaración y/o justificación ante la Oficina de Recursos Humanos. Se le exhorta para que cumpla con las obligaciones y responsabilidades que el marco jurídico y normativo establecen, con el propósito de no afectar su desarrollo en la institución, ni demeritar el servicio público que ésta ofrece, de lo contrario se procederá al artículo 71 f (2), y al artículo 76, del reglamento de las condiciones generales del trabajo del personal de la secretaría de educación pública.`;
+  const textoLegalSEP = `De conformidad con el Reglamento de las Condiciones Generales de Trabajo del Personal de la Secretaría de Educación Pública, que establece: "La falta del trabajador a sus labores, que no se justifique por medio de licencia legalmente concedida, lo priva del derecho de reclamar el salario correspondiente a la jornada o jornadas de trabajo no desempeñadas" y en virtud de su(s) falta(s) injustificada(s) relacionada(s) en el anverso de este formato, en la(s) plaza(s) asignada(s) para desempeñar sus labores, se le descontará el sueldo correspondiente por no haberlo devengado.
+
+Es importante mencionar que cuenta usted con tres días hábiles después de recibir este documento para hacer cualquier aclaración y/o justificación ante la Oficina de Recursos Humanos. 
+
+Se le exhorta para que cumpla con las obligaciones y responsabilidades que el marco jurídico y normativo establecen, con el propósito de no afectar su desarrollo en la institución, ni demeritar el servicio público que ésta ofrece, de lo contrario se procederá al artículo 71 f (2), y al artículo 76, del reglamento de las condiciones generales del trabajo del personal de la secretaría de educación pública.`;
   
   // Función auxiliar para agregar texto largo con saltos de línea automáticos
   const agregarTextoLargo = (texto, x, y, maxWidth, fontSize = 8, color = [100, 100, 100]) => {
-    pdf.setFontSize(fontSize);
-    pdf.setTextColor(...color);
-    pdf.setFont(undefined, 'normal');
-    
-    const lines = pdf.splitTextToSize(texto, maxWidth);
-    let currentY = y;
-    
-    lines.forEach(line => {
+  pdf.setFontSize(fontSize);
+  pdf.setTextColor(...color);
+  pdf.setFont(undefined, 'normal');
+  
+  // Dividir el texto en líneas que quepan en el ancho máximo
+  const lines = pdf.splitTextToSize(texto, maxWidth);
+  let currentY = y;
+  
+  lines.forEach((line, index) => {
+    // Para todas las líneas excepto la última, justificar el texto
+    if (index < lines.length - 1) {
+      // Calcular el espacio extra necesario para justificar
+      const words = line.split(' ');
+      if (words.length > 1) {
+        // Medir el ancho del texto sin justificar
+        const textWidth = pdf.getTextWidth(line);
+        const extraSpace = maxWidth - textWidth;
+        const spacePerGap = extraSpace / (words.length - 1);
+        
+        // Dibujar cada palabra con el espaciado calculado
+        let currentX = x;
+        words.forEach((word, wordIndex) => {
+          pdf.text(word, currentX, currentY);
+          currentX += pdf.getTextWidth(word);
+          if (wordIndex < words.length - 1) {
+            currentX += pdf.getTextWidth(' ') + spacePerGap;
+          }
+        });
+      } else {
+        // Si solo hay una palabra, alinear a la izquierda
+        pdf.text(line, x, currentY);
+      }
+    } else {
+      // La última línea se alinea a la izquierda
       pdf.text(line, x, currentY);
-      currentY += fontSize * 0.5;
-    });
+    }
     
-    return currentY;
-  };
+    currentY += fontSize * 0.5;
+  });
+  
+  return currentY;
+};
   
   // Función auxiliar para agregar cabecera
 
@@ -399,41 +431,76 @@ const agregarPiePagina = (numeroPagina, totalPaginas) => {
   
   // Función auxiliar para agregar sección de firmas mejorada
     const agregarSeccionFirmas = (nombreTrabajador) => {
-    const firmaY = pageHeight - 50;
-    
-    // Resetear colores
-    pdf.setDrawColor(0, 0, 0);
-    pdf.setTextColor(0, 0, 0);
-    pdf.setFontSize(9);
-    pdf.setFont(undefined, 'normal');
-    
-    // Dos columnas para firmas
-    const columnaAncho = (pageWidth - 80) / 2;
-    const columna1X = 40;  // Firma del trabajador
-    const columna2X = columna1X + columnaAncho + 20;  // Firma del director
-    
-    // Líneas para firma
-    pdf.setLineWidth(0.5);
-    pdf.line(columna1X, firmaY, columna1X + columnaAncho, firmaY);
-    pdf.line(columna2X, firmaY, columna2X + columnaAncho, firmaY);
-    
-    // Firma del trabajador
-    pdf.setFont(undefined, 'bold');
-    pdf.text('RECIBÍ', columna1X + columnaAncho / 2, firmaY + 5, { align: 'center' });
-    pdf.setFont(undefined, 'normal');
-    pdf.setFontSize(8);
-    pdf.text(nombreTrabajador || 'Nombre del Trabajador', columna1X + columnaAncho / 2, firmaY + 9, { align: 'center' });
-    pdf.text('Trabajador/Interesado', columna1X + columnaAncho / 2, firmaY + 13, { align: 'center' });
-    
-    // Firma del Director
-    pdf.setFontSize(9);
-    pdf.setFont(undefined, 'bold');
-    pdf.text('AUTORIZA', columna2X + columnaAncho / 2, firmaY + 5, { align: 'center' });
-    pdf.setFont(undefined, 'normal');
-    pdf.setFontSize(8);
-    pdf.text(reporteConfig.firmaDirector || 'Nombre del Director', columna2X + columnaAncho / 2, firmaY + 9, { align: 'center' });
-    pdf.text('Director del Plantel', columna2X + columnaAncho / 2, firmaY + 13, { align: 'center' });
-  };
+  // Calcular posición Y considerando el espacio necesario
+  let firmaY = pageHeight - 55;
+  
+  // Si hay imagen de pie de página, ajustar la posición
+  if (reporteConfig.usarImagenPiePagina && reporteConfig.imagenPiePagina) {
+    firmaY = pageHeight - reporteConfig.alturaPiePagina - 25;
+  }
+  
+  // Resetear colores
+  pdf.setDrawColor(0, 0, 0);
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFontSize(9);
+  pdf.setFont(undefined, 'normal');
+  
+  // CÁLCULO CORRECTO PARA CENTRAR LAS DOS FIRMAS
+  const anchoFirma = 60; // Ancho de cada línea de firma
+  const espacioEntreFirmas = 30; // Espacio entre las dos firmas
+  const anchoTotal = (anchoFirma * 2) + espacioEntreFirmas;
+  
+  // Calcular posición X inicial para centrar ambas firmas
+  const xInicial = (pageWidth - anchoTotal) / 2;
+  const columna1X = xInicial; // Primera firma
+  const columna2X = xInicial + anchoFirma + espacioEntreFirmas; // Segunda firma
+  
+  // Líneas para firma
+  pdf.setLineWidth(0.5);
+  pdf.line(columna1X, firmaY, columna1X + anchoFirma, firmaY);
+  pdf.line(columna2X, firmaY, columna2X + anchoFirma, firmaY);
+  
+  // FIRMA DEL TRABAJADOR (Izquierda)
+  pdf.setFont(undefined, 'bold');
+  pdf.setFontSize(9);
+  pdf.text('RECIBÍ', columna1X + (anchoFirma / 2), firmaY + 5, { align: 'center' });
+  
+  pdf.setFont(undefined, 'normal');
+  pdf.setFontSize(8);
+  // Nombre del trabajador
+  const nombreTrabajadorCorto = nombreTrabajador || 'Nombre del Trabajador';
+  // Si el nombre es muy largo, reducir tamaño de fuente
+  if (nombreTrabajadorCorto.length > 30) {
+    pdf.setFontSize(7);
+  }
+  pdf.text(nombreTrabajadorCorto, columna1X + (anchoFirma / 2), firmaY + 9, { align: 'center' });
+  
+  pdf.setFontSize(7);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text('Trabajador/Interesado', columna1X + (anchoFirma / 2), firmaY + 13, { align: 'center' });
+  
+  // FIRMA DEL DIRECTOR (Derecha)
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFont(undefined, 'bold');
+  pdf.setFontSize(9);
+  pdf.text('AUTORIZA', columna2X + (anchoFirma / 2), firmaY + 5, { align: 'center' });
+  
+  pdf.setFont(undefined, 'normal');
+  pdf.setFontSize(8);
+  const nombreDirector = reporteConfig.firmaDirector || 'Nombre del Director';
+  // Si el nombre es muy largo, reducir tamaño de fuente
+  if (nombreDirector.length > 30) {
+    pdf.setFontSize(7);
+  }
+  pdf.text(nombreDirector, columna2X + (anchoFirma / 2), firmaY + 9, { align: 'center' });
+  
+  pdf.setFontSize(7);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text('Director del Plantel', columna2X + (anchoFirma / 2), firmaY + 13, { align: 'center' });
+  
+  // Resetear color
+  pdf.setTextColor(0, 0, 0);
+};
   
   // Calcular total de páginas
   const totalPaginas = reporteData.trabajadores.length;
@@ -459,7 +526,7 @@ const agregarPiePagina = (numeroPagina, totalPaginas) => {
     pdf.setFontSize(11);
     pdf.setFont(undefined, 'bold');
     pdf.setTextColor(0, 0, 0);
-    pdf.text('NOTIFICACIÓN DE RETARDOS Y FALTAS', pageWidth / 2, yPosition, { align: 'center' });
+    pdf.text('REPORTE DE ASISTENCIAS', pageWidth / 2, yPosition, { align: 'center' });
     
     // Período
     yPosition += 6;
@@ -470,6 +537,24 @@ const agregarPiePagina = (numeroPagina, totalPaginas) => {
       pageWidth / 2, 
       yPosition, 
       { align: 'center' }
+    );
+
+    yPosition += 5;
+    pdf.setFontSize(7);
+    pdf.setFont(undefined, 'normal');
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(
+      `Generado el ${dayjs().format('DD/MM/YYYY')} a las ${dayjs().format('HH:mm:ss')} hrs`,
+      pageWidth / 2,
+      yPosition,
+      { align: 'center' }
+    );
+
+    pdf.text(
+      `${dayjs().format('DD/MM/YYYY HH:mm')}`,
+      pageWidth - 15,
+      pageHeight - 10,
+      { align: 'right' }
     );
     
     // Información del trabajador
@@ -621,15 +706,15 @@ const agregarPiePagina = (numeroPagina, totalPaginas) => {
     pdf.setDrawColor(200, 200, 200);
     pdf.setLineWidth(0.3);
     pdf.line(20, yPosition, pageWidth - 20, yPosition);
-    
+
     yPosition += 5;
     pdf.setFont(undefined, 'bold');
     pdf.setFontSize(8);
     pdf.setTextColor(50, 50, 50);
-    pdf.text('AVISO IMPORTANTE:', 20, yPosition);
-    
+    //pdf.text('AVISO IMPORTANTE:', 20, yPosition);
+
     yPosition += 5;
-    // Agregar el texto legal con formato justificado
+    // USAR LA FUNCIÓN MEJORADA para texto justificado
     agregarTextoLargo(textoLegalSEP, 20, yPosition, pageWidth - 40, 7, [80, 80, 80]);
     
     // Agregar sección de firmas
