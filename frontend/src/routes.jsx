@@ -33,6 +33,10 @@ import ReporteRetardosFaltas from './components/Reportes/ReporteRetardosFaltas';
 // Página no encontrada
 import NotFound from './pages/NotFound';
 
+//Justificaciones
+import GestionJustificaciones from './components/Justificaciones/GestionJustificaciones';
+
+
 // Componente para rutas protegidas
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -321,6 +325,17 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <ReporteRetardosFaltas />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+
+      <Route 
+        path="/justificaciones" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <GestionJustificaciones />
             </Layout>
           </ProtectedRoute>
         } 

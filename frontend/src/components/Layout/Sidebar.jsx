@@ -246,8 +246,8 @@ const Sidebar = ({ open }) => {
               <ListItem 
                 button 
                 component={RouterLink} 
-                to="/configuracion/reglas-justificacion" 
-                selected={isActive('/configuracion/reglas-justificacion')}
+                to="/justificaciones" 
+                selected={isActive('/justificaciones')}
                 sx={{ pl: 4 }}
               >
                 <ListItemText primary="Reglas de Justificación" />
