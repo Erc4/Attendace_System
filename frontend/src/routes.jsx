@@ -30,6 +30,8 @@ import ReportesAsistencia from './components/Asistencias/ReportesAsistencia';
 // Componentes de reportes
 import ReporteRetardosFaltas from './components/Reportes/ReporteRetardosFaltas';
 
+import GestionJustificaciones from './components/Justificaciones/GestionJustificaciones';
+
 // Página no encontrada
 import NotFound from './pages/NotFound';
 
@@ -230,7 +232,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Gestión de Justificaciones (por implementar)</div>
+              <GestionJustificaciones/>
             </Layout>
           </ProtectedRoute>
         } 
