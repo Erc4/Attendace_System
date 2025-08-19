@@ -305,69 +305,6 @@ const asistenciaService = {
   },
 };
 
-// Servicios para justificaciones
-const justificacionService = {
-  getAll: async (params = {}) => {
-    try {
-      const response = await axiosInstance.get('/justificaciones', { params });
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al obtener justificaciones:', error);
-      throw error;
-    }
-  },
-  
-  getById: async (id) => {
-    try {
-      const response = await axiosInstance.get(`/justificaciones/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al obtener justificación:', error);
-      throw error;
-    }
-  },
-  
-  create: async (justificacion) => {
-    try {
-      const response = await axiosInstance.post('/justificaciones', justificacion);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al crear justificación:', error);
-      throw error;
-    }
-  },
-  
-  update: async (id, justificacion) => {
-    try {
-      const response = await axiosInstance.put(`/justificaciones/${id}`, justificacion);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al actualizar justificación:', error);
-      throw error;
-    }
-  },
-  
-  delete: async (id) => {
-    try {
-      const response = await axiosInstance.delete(`/justificaciones/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al eliminar justificación:', error);
-      throw error;
-    }
-  },
-  
-  getReglasJustificacion: async () => {
-    try {
-      const response = await axiosInstance.get('/reglas-justificacion');
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al obtener reglas de justificación:', error);
-      throw error;
-    }
-  },
-};
-
 // Servicios para horarios - COMPLETAMENTE ACTUALIZADO
 const horarioService = {
   // Obtener todos los horarios con filtros
@@ -770,6 +707,70 @@ const reporteService = {
       throw error;
     }
   },
+  createJustificacion: async (justificacion) => {
+    try {
+      console.log('📤 Creando justificación:', justificacion);
+      const response = await axiosInstance.post('/justificaciones', justificacion);
+      console.log('✅ Justificación creada:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear justificación:', error);
+      throw error;
+    }
+  },
+  
+  getJustificaciones: async (params = {}) => {
+    try {
+      console.log('📤 Obteniendo justificaciones con parámetros:', params);
+      
+      const queryParams = new URLSearchParams();
+      if (params.fecha_inicio) queryParams.append('fecha_inicio', params.fecha_inicio);
+      if (params.fecha_fin) queryParams.append('fecha_fin', params.fecha_fin);
+      if (params.trabajador_id) queryParams.append('trabajador_id', params.trabajador_id);
+      
+      const response = await axiosInstance.get(`/justificaciones?${queryParams.toString()}`);
+      console.log('📥 Justificaciones obtenidas:', response.data);
+      
+      // Transformar los datos para incluir el nombre del trabajador
+      const justificacionesConNombre = response.data.map(just => ({
+        ...just,
+        trabajador_nombre: just.trabajador ? 
+          `${just.trabajador.nombre} ${just.trabajador.apellidoPaterno} ${just.trabajador.apellidoMaterno}` :
+          'Trabajador desconocido'
+      }));
+      
+      return justificacionesConNombre;
+    } catch (error) {
+      console.error('❌ Error al obtener justificaciones:', error);
+      throw error;
+    }
+  },
+  
+  deleteJustificacion: async (id) => {
+    try {
+      console.log('🗑️ Eliminando justificación:', id);
+      await axiosInstance.delete(`/justificaciones/${id}`);
+      console.log('✅ Justificación eliminada');
+      return true;
+    } catch (error) {
+      console.error('❌ Error al eliminar justificación:', error);
+      throw error;
+    }
+  },
+  
+  getJustificacionesPorTrabajador: async (trabajadorId, fechaInicio, fechaFin) => {
+    try {
+      const params = {};
+      if (fechaInicio) params.fecha_inicio = fechaInicio;
+      if (fechaFin) params.fecha_fin = fechaFin;
+      
+      const response = await axiosInstance.get(`/trabajadores/${trabajadorId}/justificaciones`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener justificaciones del trabajador:', error);
+      throw error;
+    }
+  }
 };
 
 // Servicios para departamentos y otros catálogos
@@ -904,6 +905,46 @@ const catalogoService = {
       return response.data;
     } catch (error) {
       console.error('❌ Error al crear centro de trabajo:', error);
+      throw error;
+    }
+  },
+
+  getReglasJustificacion: async () => {
+    try {
+      const response = await axiosInstance.get('/reglas-justificacion');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reglas de justificación:', error);
+      throw error;
+    }
+  },
+  
+  createReglaJustificacion: async (regla) => {
+    try {
+      const response = await axiosInstance.post('/reglas-justificacion', regla);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear regla de justificación:', error);
+      throw error;
+    }
+  },
+  
+  updateReglaJustificacion: async (id, regla) => {
+    try {
+      const response = await axiosInstance.put(`/reglas-justificacion/${id}`, regla);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar regla de justificación:', error);
+      throw error;
+    }
+  },
+  
+  deleteReglaJustificacion: async (id) => {
+    try {
+      await axiosInstance.delete(`/reglas-justificacion/${id}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Error al eliminar regla de justificación:', error);
       throw error;
     }
   },
@@ -1189,7 +1230,6 @@ export {
   authService,
   trabajadorService,
   asistenciaService,
-  justificacionService,
   horarioService,
   reporteService,
   catalogoService,
