@@ -497,37 +497,66 @@ const GestionJustificaciones = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {justificaciones.map((just) => (
-                    <TableRow key={just.id}>
-                      <TableCell>
-                        {dayjs(just.fecha).format('DD/MM/YYYY')}
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <PersonIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                          {just.trabajador_nombre}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={just.descripcion}
-                          color="primary"
-                          variant="outlined"
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleEliminarJustificacion(just.id)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
+  {justificaciones.length === 0 ? (
+    <TableRow>
+      <TableCell colSpan={4} align="center">
+        <Typography variant="body2" color="textSecondary">
+          No hay justificaciones registradas en el período seleccionado
+        </Typography>
+      </TableCell>
+    </TableRow>
+  ) : (
+    justificaciones.map((justificacion) => (
+      <TableRow key={justificacion.id}>
+        <TableCell>
+          {dayjs(justificacion.fecha).format('DD/MM/YYYY')}
+        </TableCell>
+        <TableCell>
+          {/* Renderizar información del trabajador */}
+          {justificacion.trabajador ? (
+            <Box>
+              <Typography variant="body2">
+                {justificacion.trabajador.nombre}
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                RFC: {justificacion.trabajador.rfc}
+              </Typography>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="error">
+              Trabajador desconocido
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell>
+          {/* Renderizar la regla de justificación */}
+          {justificacion.regla_justificacion ? (
+            <Chip 
+              label={justificacion.regla_justificacion.descripcion}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+          ) : (
+            <Typography variant="body2" color="textSecondary">
+              Sin descripción
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell align="center">
+          <IconButton
+            size="small"
+            color="error"
+            onClick={() => handleEliminarJustificacion(justificacion.id)}
+            title="Eliminar justificación"
+          >
+            <DeleteIcon />
+          </IconButton>
+        </TableCell>
+      </TableRow>
+    ))
+  )}
+</TableBody>
               </Table>
             </TableContainer>
           </Box>

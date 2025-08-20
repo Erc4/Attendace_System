@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, validator
 from datetime import datetime, date, time
-from typing import Optional, List
+from typing import Optional, List, Union
 
 # Schemas base para las tablas relacionadas
 class TipoTrabajadorBase(BaseModel):
@@ -258,13 +258,57 @@ class RegistroAsistenciaOut(BaseModel):
 # Schemas para Justificaciones
 class JustificacionCreate(BaseModel):
     id_trabajador: int
-    fecha: datetime
+    fecha: Union[str, datetime, date]
     id_descripcion: int
+
+    @validator('fecha', pre=True)
+    def parse_fecha(cls, v):
+        """Convierte string o date a datetime"""
+        if isinstance(v, str):
+            # Si es string, intentar parsearlo
+            try:
+                # Primero intentar como fecha simple YYYY-MM-DD
+                if len(v) == 10 and v.count('-') == 2:
+                    # Es una fecha simple, agregar hora 00:00:00
+                    return datetime.strptime(v, '%Y-%m-%d')
+                else:
+                    # Intentar parsear como datetime completo
+                    return datetime.fromisoformat(v.replace('Z', '+00:00'))
+            except ValueError as e:
+                raise ValueError(f"Formato de fecha inválido: {v}. Use YYYY-MM-DD o ISO format")
+        elif isinstance(v, date) and not isinstance(v, datetime):
+            # Si es date pero no datetime, convertir a datetime con hora 00:00:00
+            return datetime.combine(v, time.min)
+        elif isinstance(v, datetime):
+            # Si ya es datetime, devolverlo tal cual
+            return v
+        else:
+            raise ValueError(f"Tipo de fecha no soportado: {type(v)}")
 
 class JustificacionUpdate(BaseModel):
     id_trabajador: Optional[int] = None
     fecha: Optional[datetime] = None
     id_descripcion: Optional[int] = None
+
+    @validator('fecha', pre=True)
+    def parse_fecha(cls, v):
+        """Convierte string o date a datetime"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                if len(v) == 10 and v.count('-') == 2:
+                    return datetime.strptime(v, '%Y-%m-%d')
+                else:
+                    return datetime.fromisoformat(v.replace('Z', '+00:00'))
+            except ValueError as e:
+                raise ValueError(f"Formato de fecha inválido: {v}. Use YYYY-MM-DD o ISO format")
+        elif isinstance(v, date) and not isinstance(v, datetime):
+            return datetime.combine(v, time.min)
+        elif isinstance(v, datetime):
+            return v
+        else:
+            raise ValueError(f"Tipo de fecha no soportado: {type(v)}")
 
 class JustificacionOut(BaseModel):
     id: int

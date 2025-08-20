@@ -28,12 +28,18 @@ def create_justificacion(
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(check_admin_permissions)
 ):
-    # Verificar si el trabajador existe
-    trabajador = db.query(Trabajador).filter(Trabajador.id == justificacion.id_empleado).first()
+    # Logging para debug
+    print(f"📝 Datos recibidos para justificación:")
+    print(f"   - id_trabajador: {justificacion.id_trabajador}")
+    print(f"   - fecha: {justificacion.fecha}")
+    print(f"   - id_descripcion: {justificacion.id_descripcion}")
+    
+    # Verificar si el trabajador existe - CORREGIDO: usar id_trabajador
+    trabajador = db.query(Trabajador).filter(Trabajador.id == justificacion.id_trabajador).first()
     if not trabajador:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Trabajador con ID {justificacion.id_empleado} no existe"
+            detail=f"Trabajador con ID {justificacion.id_trabajador} no existe"
         )
     
     # Verificar si la regla de justificación existe
@@ -48,12 +54,12 @@ def create_justificacion(
     db_justificacion = Justificacion(**justificacion.dict())
     db.add(db_justificacion)
     
-    # Actualizar el registro de asistencia si existe
+    # Actualizar el registro de asistencia si existe - CORREGIDO: usar id_trabajador
     fecha_inicio = datetime.combine(justificacion.fecha.date(), time.min)
     fecha_fin = datetime.combine(justificacion.fecha.date(), time.max)
     
     registro_asistencia = db.query(RegistroAsistencia).filter(
-        RegistroAsistencia.id_empleado == justificacion.id_empleado,
+        RegistroAsistencia.id_trabajador == justificacion.id_trabajador,  # CORREGIDO
         RegistroAsistencia.fecha >= fecha_inicio,
         RegistroAsistencia.fecha <= fecha_fin
     ).first()
@@ -62,9 +68,9 @@ def create_justificacion(
         # Si el registro ya existe, actualizarlo a JUSTIFICADO
         registro_asistencia.estatus = "JUSTIFICADO"
     else:
-        # Si no existe, crear un nuevo registro
+        # Si no existe, crear un nuevo registro con status JUSTIFICADO
         nuevo_registro = RegistroAsistencia(
-            id_empleado=justificacion.id_empleado,
+            id_trabajador=justificacion.id_trabajador,  # CORREGIDO
             fecha=justificacion.fecha,
             estatus="JUSTIFICADO"
         )
@@ -74,18 +80,30 @@ def create_justificacion(
     db.refresh(db_justificacion)
     return db_justificacion
 
-@router.get("/justificaciones", response_model=List[JustificacionOut])
+@router.get("/justificaciones")
 def get_justificaciones(
     skip: int = 0, 
     limit: int = 100,
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
-    id_empleado: Optional[int] = None,
+    id_trabajador: Optional[int] = None,  # CORREGIDO: cambio de id_empleado a id_trabajador
     id_descripcion: Optional[int] = None, 
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    query = db.query(Justificacion)
+    """
+    Obtiene las justificaciones con información completa del trabajador y la regla
+    """
+    # Hacer JOIN con las tablas relacionadas para obtener información completa
+    query = db.query(
+        Justificacion,
+        Trabajador,
+        ReglaJustificacion
+    ).join(
+        Trabajador, Justificacion.id_trabajador == Trabajador.id
+    ).join(
+        ReglaJustificacion, Justificacion.id_descripcion == ReglaJustificacion.id
+    )
     
     # Aplicar filtros si se proporcionan
     if fecha_inicio:
@@ -94,27 +112,83 @@ def get_justificaciones(
     if fecha_fin:
         query = query.filter(Justificacion.fecha <= datetime.combine(fecha_fin, time.max))
     
-    if id_empleado:
-        query = query.filter(Justificacion.id_empleado == id_empleado)
+    if id_trabajador:
+        query = query.filter(Justificacion.id_trabajador == id_trabajador)
     
     if id_descripcion:
         query = query.filter(Justificacion.id_descripcion == id_descripcion)
     
-    return query.offset(skip).limit(limit).all()
+    # Ejecutar la consulta
+    resultados = query.offset(skip).limit(limit).all()
+    
+    # Formatear la respuesta con toda la información necesaria
+    justificaciones_completas = []
+    for justificacion, trabajador, regla in resultados:
+        justificaciones_completas.append({
+            "id": justificacion.id,
+            "id_trabajador": justificacion.id_trabajador,
+            "fecha": justificacion.fecha,
+            "id_descripcion": justificacion.id_descripcion,
+            "trabajador": {
+                "id": trabajador.id,
+                "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+                "rfc": trabajador.rfc,
+                "puesto": trabajador.puesto
+            },
+            "regla_justificacion": {
+                "id": regla.id,
+                "descripcion": regla.descripcion
+            }
+        })
+    
+    return justificaciones_completas
 
-@router.get("/justificaciones/{justificacion_id}", response_model=JustificacionOut)
-def get_justificacion_by_id(
+@router.get("/justificaciones/{justificacion_id}")
+def get_justificacion(
     justificacion_id: int, 
     db: Session = Depends(get_db),
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
-    justificacion = db.query(Justificacion).filter(Justificacion.id == justificacion_id).first()
-    if not justificacion:
+    """
+    Obtiene una justificación específica con información completa
+    """
+    # Hacer JOIN con las tablas relacionadas
+    resultado = db.query(
+        Justificacion,
+        Trabajador,
+        ReglaJustificacion
+    ).join(
+        Trabajador, Justificacion.id_trabajador == Trabajador.id
+    ).join(
+        ReglaJustificacion, Justificacion.id_descripcion == ReglaJustificacion.id
+    ).filter(
+        Justificacion.id == justificacion_id
+    ).first()
+    
+    if not resultado:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Justificación con ID {justificacion_id} no encontrada"
         )
-    return justificacion
+    
+    justificacion, trabajador, regla = resultado
+    
+    return {
+        "id": justificacion.id,
+        "id_trabajador": justificacion.id_trabajador,
+        "fecha": justificacion.fecha,
+        "id_descripcion": justificacion.id_descripcion,
+        "trabajador": {
+            "id": trabajador.id,
+            "nombre": f"{trabajador.nombre} {trabajador.apellidoPaterno} {trabajador.apellidoMaterno}",
+            "rfc": trabajador.rfc,
+            "puesto": trabajador.puesto
+        },
+        "regla_justificacion": {
+            "id": regla.id,
+            "descripcion": regla.descripcion
+        }
+    }
 
 @router.put("/justificaciones/{justificacion_id}", response_model=JustificacionOut)
 def update_justificacion(
@@ -132,6 +206,24 @@ def update_justificacion(
     
     # Actualizar campos si están presentes en la solicitud
     update_data = justificacion_update.dict(exclude_unset=True)
+    
+    # Si se está actualizando el trabajador, verificar que exista
+    if 'id_trabajador' in update_data:
+        trabajador = db.query(Trabajador).filter(Trabajador.id == update_data['id_trabajador']).first()
+        if not trabajador:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Trabajador con ID {update_data['id_trabajador']} no existe"
+            )
+    
+    # Si se está actualizando la regla de justificación, verificar que exista
+    if 'id_descripcion' in update_data:
+        regla = db.query(ReglaJustificacion).filter(ReglaJustificacion.id == update_data['id_descripcion']).first()
+        if not regla:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Regla de justificación con ID {update_data['id_descripcion']} no existe"
+            )
     
     for key, value in update_data.items():
         setattr(db_justificacion, key, value)
@@ -153,12 +245,12 @@ def delete_justificacion(
             detail=f"Justificación con ID {justificacion_id} no encontrada"
         )
     
-    # Obtener y actualizar el registro de asistencia correspondiente si existe
+    # Obtener y actualizar el registro de asistencia correspondiente si existe - CORREGIDO
     fecha_inicio = datetime.combine(db_justificacion.fecha.date(), time.min)
     fecha_fin = datetime.combine(db_justificacion.fecha.date(), time.max)
     
     registro_asistencia = db.query(RegistroAsistencia).filter(
-        RegistroAsistencia.id_empleado == db_justificacion.id_empleado,
+        RegistroAsistencia.id_trabajador == db_justificacion.id_trabajador,  # CORREGIDO
         RegistroAsistencia.fecha >= fecha_inicio,
         RegistroAsistencia.fecha <= fecha_fin
     ).first()
@@ -192,6 +284,20 @@ def get_reglas_justificacion(
     current_user: Trabajador = Depends(get_current_trabajador)
 ):
     return db.query(ReglaJustificacion).offset(skip).limit(limit).all()
+
+@router.get("/reglas-justificacion/{regla_id}", response_model=ReglaJustificacionOut)
+def get_regla_justificacion(
+    regla_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Trabajador = Depends(get_current_trabajador)
+):
+    db_regla = db.query(ReglaJustificacion).filter(ReglaJustificacion.id == regla_id).first()
+    if not db_regla:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Regla de justificación con ID {regla_id} no encontrada"
+        )
+    return db_regla
 
 @router.put("/reglas-justificacion/{regla_id}", response_model=ReglaJustificacionOut)
 def update_regla_justificacion(
