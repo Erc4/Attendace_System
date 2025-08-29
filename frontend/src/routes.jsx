@@ -34,6 +34,7 @@ import GestionJustificaciones from './components/Justificaciones/GestionJustific
 
 // Página no encontrada
 import NotFound from './pages/NotFound';
+import GestionDiasFestivos from './components/DiasFestivos/GestionDiasFestivos';
 
 // Componente para rutas protegidas
 const ProtectedRoute = ({ children }) => {
@@ -244,7 +245,7 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Layout>
-              <div>Gestión de Días Festivos (por implementar)</div>
+              <GestionDiasFestivos/>
             </Layout>
           </ProtectedRoute>
         } 

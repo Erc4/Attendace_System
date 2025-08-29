@@ -11,3 +11,35 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.MuiSelect-select {
+  min-width: 120px !important;
+}
+
+/* Fix para Select con size="small" */
+.MuiSelect-select.MuiInputBase-inputSizeSmall {
+  min-width: 140px !important;
+  padding-right: 32px !important;
+}
+
+/* Fix para Select en FormControl */
+.MuiFormControl-root .MuiSelect-select {
+  min-width: 120px !important;
+}
+
+/* Fix para mantener altura consistente */
+.MuiOutlinedInput-root .MuiSelect-select {
+  min-height: 1.4375em;
+}
+
+/* Fix para Select nativos */
+.MuiNativeSelect-select {
+  min-width: 120px !important;
+  padding-right: 32px !important;
+}
+
+/* Mantener tamaño cuando está vacío */
+.MuiSelect-select:empty::before {
+  content: '\00a0';
+  visibility: hidden;
+}

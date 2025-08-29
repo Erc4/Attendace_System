@@ -436,15 +436,6 @@ const horarioService = {
   },
 
   // Obtener días festivos
-  getDiasFestivos: async () => {
-    try {
-      const response = await axiosInstance.get('/dias-festivos');
-      return response.data;
-    } catch (error) {
-      console.error('❌ Error al obtener días festivos:', error);
-      throw error;
-    }
-  },
 };
 
 // Servicios para reportes - CORREGIDO
@@ -949,6 +940,114 @@ const catalogoService = {
     }
   },
 };
+
+export const diasFestivosService = {
+  // Obtener todos los días festivos con filtros
+  getAll: async (params = {}) => {
+    try {
+      const queryParams = new URLSearchParams();
+      
+      if (params.skip) queryParams.append('skip', params.skip);
+      if (params.limit) queryParams.append('limit', params.limit);
+      if (params.anio) queryParams.append('anio', params.anio);
+      if (params.mes) queryParams.append('mes', params.mes);
+      
+      console.log('📤 Solicitando días festivos con parámetros:', params);
+      const response = await axiosInstance.get(`/dias-festivos?${queryParams.toString()}`);
+      console.log('📥 Días festivos obtenidos:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener días festivos:', error);
+      throw error;
+    }
+  },
+
+  // Obtener un día festivo por ID
+  getById: async (id) => {
+    try {
+      const response = await axiosInstance.get(`/dias-festivos/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener día festivo:', error);
+      throw error;
+    }
+  },
+
+  // Obtener próximos días festivos
+  getProximos: async (cantidad = 5) => {
+    try {
+      const response = await axiosInstance.get(`/dias-festivos/proximos?cantidad=${cantidad}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener próximos días festivos:', error);
+      throw error;
+    }
+  },
+
+  // Crear un nuevo día festivo
+  create: async (diaFestivo) => {
+    try {
+      console.log('📤 Creando día festivo:', diaFestivo);
+      const response = await axiosInstance.post('/dias-festivos', diaFestivo);
+      console.log('✅ Día festivo creado:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear día festivo:', error);
+      throw error;
+    }
+  },
+
+  // Actualizar un día festivo
+  update: async (id, diaFestivo) => {
+    try {
+      console.log('📤 Actualizando día festivo:', id, diaFestivo);
+      const response = await axiosInstance.put(`/dias-festivos/${id}`, diaFestivo);
+      console.log('✅ Día festivo actualizado:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar día festivo:', error);
+      throw error;
+    }
+  },
+
+  // Eliminar un día festivo
+  delete: async (id) => {
+    try {
+      console.log('🗑️ Eliminando día festivo:', id);
+      const response = await axiosInstance.delete(`/dias-festivos/${id}`);
+      console.log('✅ Día festivo eliminado');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al eliminar día festivo:', error);
+      throw error;
+    }
+  },
+
+  // Cargar días festivos predeterminados de México
+  cargarPredeterminados: async (anio) => {
+    try {
+      console.log('📤 Cargando días festivos predeterminados para el año:', anio);
+      const response = await axiosInstance.post(`/dias-festivos/cargar-predeterminados?anio=${anio}`);
+      console.log('✅ Días festivos cargados:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al cargar días festivos predeterminados:', error);
+      throw error;
+    }
+  },
+
+  // Verificar si una fecha es día festivo
+  verificarFecha: async (fecha) => {
+    try {
+      const response = await axiosInstance.get(`/dias-festivos/verificar/${fecha}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al verificar fecha:', error);
+      throw error;
+    }
+  }
+};
+
 
 // Utilidades para horarios
 const horarioUtils = {

@@ -10,7 +10,8 @@ from app.models.models import (
     Trabajador, 
     ReglaRetardo,
     Departamento,
-    Horario
+    Horario,
+    DiaFestivo
 )
 from app.schemas.schemas import (
     RegistroAsistenciaCreate,
@@ -69,16 +70,24 @@ def determinar_tipo_registro(trabajador: Trabajador, fecha_hora_registro: dateti
     print("Ya hay entrada registrada, siguiente es SALIDA")
     return "SALIDA"
 
+# REEMPLAZAR la función determinar_estatus_asistencia existente con esta versión actualizada:
+
 def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: datetime, tipo_registro: str, db: Session) -> str:
     """
     Determina el estatus de asistencia basado en:
     - El tipo de registro (ENTRADA o SALIDA)
     - El horario del trabajador
     - Las reglas de retardo (solo para ENTRADA)
+    - Si es día festivo (NUEVO)
     """
     print(f"=== DETERMINANDO ESTATUS PARA {tipo_registro} ===")
     print(f"Trabajador: {trabajador.nombre} {trabajador.apellidoPaterno}")
     print(f"Fecha/hora registro: {fecha_hora_registro}")
+    
+    # NUEVO: Verificar si es día festivo
+    if es_dia_festivo(fecha_hora_registro.date(), db):
+        print("📅 Es día festivo, asignando DIA_FESTIVO")
+        return "DIA_FESTIVO"
     
     # Para registros de SALIDA, siempre es "SALIDA"
     if tipo_registro == "SALIDA":
@@ -155,6 +164,37 @@ def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: d
         print(f"❌ FALTA (llegó {minutos_diferencia} minutos después)")
         return "FALTA"
 
+def es_dia_festivo(fecha: date, db: Session) -> bool:
+    """
+    Verifica si una fecha es día festivo
+    """
+    from app.models.models import DiaFestivo
+    from datetime import datetime, time
+    
+    fecha_inicio = datetime.combine(fecha, time.min)
+    fecha_fin = datetime.combine(fecha, time.max)
+    
+    dia_festivo = db.query(DiaFestivo).filter(
+        DiaFestivo.fecha >= fecha_inicio,
+        DiaFestivo.fecha <= fecha_fin
+    ).first()
+    
+    return dia_festivo is not None
+
+def es_dia_laboral(fecha: date, db: Session) -> bool:
+    """
+    Verifica si una fecha es día laboral
+    Retorna False si es fin de semana o día festivo
+    """
+    # Verificar si es fin de semana (5 = sábado, 6 = domingo)
+    if fecha.weekday() >= 5:
+        return False
+    
+    # Verificar si es día festivo
+    if es_dia_festivo(fecha, db):
+        return False
+    
+    return True
 # ===== RUTAS ESPECIALES (DEBEN IR PRIMERO) =====
 
 @router.get("/asistencias/hoy")

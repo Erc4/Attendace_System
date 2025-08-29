@@ -102,8 +102,8 @@ const Dashboard = () => {
   };
   
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
+    <Box marginTop={3}>
+      <Typography variant="h5" gutterBottom>
         Dashboard
       </Typography>
       

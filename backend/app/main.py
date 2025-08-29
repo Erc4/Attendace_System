@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routes import trabajadores, asistencia, justificaciones, horarios, reportes, auth, catalogos
+from app.routes import trabajadores, asistencia, justificaciones, horarios, reportes, auth, catalogos, dias_festivos
 from app.database import engine
 from app.models import models
 
@@ -39,6 +39,7 @@ app.include_router(justificaciones.router, prefix="/api", tags=["Justificaciones
 app.include_router(horarios.router, prefix="/api", tags=["Horarios"])
 app.include_router(reportes.router, prefix="/api/reportes", tags=["reportes"])
 app.include_router(catalogos.router, prefix="/api", tags=["Catálogos"])
+app.include_router(dias_festivos.router, prefix="/api", tags=["Días Festivos"])
 
 @app.get("/")
 async def root():
