@@ -36,6 +36,8 @@ import GestionJustificaciones from './components/Justificaciones/GestionJustific
 import NotFound from './pages/NotFound';
 import GestionDiasFestivos from './components/DiasFestivos/GestionDiasFestivos';
 
+//Configuración
+import ConfiguracionReglasRetardo from './components/Configuracion/ConfiguracionReglasRetardo';
 // Componente para rutas protegidas
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -331,11 +333,11 @@ const AppRoutes = () => {
       
       {/* Configuración */}
       <Route 
-        path="/configuracion/:section" 
+        path="/configuracion/reglas-retardo" 
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredrole="admin">
             <Layout>
-              <div>Sección de Configuración (por implementar)</div>
+              <ConfiguracionReglasRetardo />
             </Layout>
           </ProtectedRoute>
         } 

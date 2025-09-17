@@ -1324,6 +1324,60 @@ const reinitializeAxios = () => {
   console.log('✅ Axios reinicializado correctamente');
 };
 
+export const reglasRetardoService = {
+  // Obtener todas las reglas de retardo
+  getAll: async () => {
+    try {
+      console.log('📤 Solicitando reglas de retardo...');
+      const response = await axiosInstance.get('/reglas-retardo');
+      console.log('📥 Reglas de retardo obtenidas:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al obtener reglas de retardo:', error);
+      throw error;
+    }
+  },
+
+  // Crear una nueva regla de retardo
+  create: async (regla) => {
+    try {
+      console.log('📤 Creando regla de retardo:', regla);
+      const response = await axiosInstance.post('/reglas-retardo', regla);
+      console.log('✅ Regla de retardo creada:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al crear regla de retardo:', error);
+      throw error;
+    }
+  },
+
+  // Actualizar una regla de retardo
+  update: async (id, regla) => {
+    try {
+      console.log('📤 Actualizando regla de retardo:', id, regla);
+      const response = await axiosInstance.put(`/reglas-retardo/${id}`, regla);
+      console.log('✅ Regla de retardo actualizada:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al actualizar regla de retardo:', error);
+      throw error;
+    }
+  },
+
+  // Eliminar una regla de retardo
+  delete: async (id) => {
+    try {
+      console.log('🗑️ Eliminando regla de retardo:', id);
+      const response = await axiosInstance.delete(`/reglas-retardo/${id}`);
+      console.log('✅ Regla de retardo eliminada');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error al eliminar regla de retardo:', error);
+      throw error;
+    }
+  }
+};
+
 // Exportar todos los servicios y utilidades
 export {
   authService,

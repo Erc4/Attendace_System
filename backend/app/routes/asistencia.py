@@ -70,21 +70,21 @@ def determinar_tipo_registro(trabajador: Trabajador, fecha_hora_registro: dateti
     print("Ya hay entrada registrada, siguiente es SALIDA")
     return "SALIDA"
 
-# REEMPLAZAR la función determinar_estatus_asistencia existente con esta versión actualizada:
+# REEMPLAZAR la función determinar_estatus_asistencia en asistencia.py con esta versión:
 
 def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: datetime, tipo_registro: str, db: Session) -> str:
     """
     Determina el estatus de asistencia basado en:
     - El tipo de registro (ENTRADA o SALIDA)
     - El horario del trabajador
-    - Las reglas de retardo (solo para ENTRADA)
-    - Si es día festivo (NUEVO)
+    - Las reglas de retardo de la BD (ACTUALIZADO)
+    - Si es día festivo
     """
     print(f"=== DETERMINANDO ESTATUS PARA {tipo_registro} ===")
     print(f"Trabajador: {trabajador.nombre} {trabajador.apellidoPaterno}")
     print(f"Fecha/hora registro: {fecha_hora_registro}")
     
-    # NUEVO: Verificar si es día festivo
+    # Verificar si es día festivo
     if es_dia_festivo(fecha_hora_registro.date(), db):
         print("📅 Es día festivo, asignando DIA_FESTIVO")
         return "DIA_FESTIVO"
@@ -150,19 +150,45 @@ def determinar_estatus_asistencia(trabajador: Trabajador, fecha_hora_registro: d
         print(f"❌ Error al calcular diferencia: {e}")
         return "ASISTENCIA"
     
-    # Aplicar las reglas de tolerancia
-    if minutos_diferencia <= 10:
-        print(f"✅ ASISTENCIA (llegó {minutos_diferencia} minutos después)")
-        return "ASISTENCIA"
-    elif minutos_diferencia <= 20:
-        print(f"⚠️ RETARDO_MENOR (llegó {minutos_diferencia} minutos después)")
-        return "RETARDO_MENOR"
-    elif minutos_diferencia <= 30:
-        print(f"⚠️ RETARDO_MAYOR (llegó {minutos_diferencia} minutos después)")
-        return "RETARDO_MAYOR"
-    else:
-        print(f"❌ FALTA (llegó {minutos_diferencia} minutos después)")
-        return "FALTA"
+    # NUEVO: Obtener las reglas de retardo de la BD
+    reglas_retardo = db.query(ReglaRetardo).order_by(ReglaRetardo.minutosMin).all()
+    
+    if not reglas_retardo:
+        # Si no hay reglas configuradas, usar comportamiento por defecto
+        print("⚠️ No hay reglas de retardo configuradas, usando valores por defecto")
+        if minutos_diferencia <= 10:
+            print(f"✅ ASISTENCIA (llegó {minutos_diferencia} minutos después)")
+            return "ASISTENCIA"
+        elif minutos_diferencia <= 20:
+            print(f"⚠️ RETARDO_MENOR (llegó {minutos_diferencia} minutos después)")
+            return "RETARDO_MENOR"
+        elif minutos_diferencia <= 30:
+            print(f"⚠️ RETARDO_MAYOR (llegó {minutos_diferencia} minutos después)")
+            return "RETARDO_MAYOR"
+        else:
+            print(f"❌ FALTA (llegó {minutos_diferencia} minutos después)")
+            return "FALTA"
+    
+    # Aplicar las reglas de la BD
+    for regla in reglas_retardo:
+        if regla.minutosMin <= minutos_diferencia <= regla.minutosMax:
+            print(f"📋 Aplicando regla: {regla.descripcion} ({regla.minutosMin}-{regla.minutosMax} min)")
+            print(f"✅ Estatus: {regla.descripcion.upper().replace(' ', '_')}")
+            
+            # Normalizar el nombre del estatus
+            estatus = regla.descripcion.upper().replace(' ', '_')
+            
+            # Mapear algunos nombres comunes
+            if 'TOLERANCIA' in estatus:
+                return "ASISTENCIA"
+            elif 'FALTA' in estatus:
+                return "FALTA"
+            else:
+                return estatus
+    
+    # Si no cae en ninguna regla, es FALTA
+    print(f"❌ No hay regla para {minutos_diferencia} minutos, asignando FALTA")
+    return "FALTA"
 
 def es_dia_festivo(fecha: date, db: Session) -> bool:
     """
