@@ -6,7 +6,7 @@ from app.database import engine
 from app.models import models
 
 # Crear todas las tablas en la base de datos
-models.Base.metadata.create_all(bind=engine)
+#models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
