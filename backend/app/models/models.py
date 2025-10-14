@@ -102,7 +102,7 @@ class AsignacionHorario(Base):
 
 # MODELO CORREGIDO PARA REGISTRO DE ASISTENCIA - USANDO id_trabajador
 class RegistroAsistencia(Base):
-    __tablename__ = "registroAsistencia"
+    __tablename__ = "registroasistencia"
 
     id = Column(Integer, primary_key=True, index=True)
     # CORREGIDO: Usar id_trabajador que es como está en la base de datos
