@@ -17,19 +17,18 @@ app = FastAPI(
 # Configuración de CORS para permitir solicitudes desde el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://attendace-system-rouge.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "*"  # Permitir todos los orígenes temporalmente
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
-
-@app.middleware("http")
-async def cors_handler(request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
 
 # Incluir los routers
 app.include_router(auth.router, prefix="/api", tags=["Autenticación"])
