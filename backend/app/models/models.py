@@ -42,7 +42,7 @@ class Trabajador(Base):
     rol_rel = relationship("RolUsuario", back_populates="trabajadores")
 
 class TipoTrabajador(Base):
-    __tablename__ = "tipoTrabajador"
+    __tablename__ = "tipotrabajador"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
@@ -79,7 +79,7 @@ class Horario(Base):
     trabajadores = relationship("Trabajador", back_populates="horario_rel")
 
 class CentroTrabajo(Base):
-    __tablename__ = "centroTrabajo"
+    __tablename__ = "centrotrabajo"
 
     id = Column(Integer, primary_key=True, index=True)
     claveCT = Column(String(100), nullable=False)
@@ -93,7 +93,7 @@ class CentroTrabajo(Base):
     trabajadores = relationship("Trabajador", back_populates="centro_trabajo_rel")
 
 class AsignacionHorario(Base):
-    __tablename__ = "asignacionHorarios"
+    __tablename__ = "asignacionhorarios"
     
     id = Column(Integer, primary_key=True, index=True)
     id_trabajador = Column(Integer, ForeignKey("trabajadores.id"))
@@ -114,7 +114,7 @@ class RegistroAsistencia(Base):
     trabajador = relationship("Trabajador", backref="asistencias")
 
 class GradoEstudio(Base):
-    __tablename__ = "gradosEstudio"
+    __tablename__ = "gradosestudio"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
@@ -132,13 +132,13 @@ class Justificacion(Base):
     id_descripcion = Column(Integer, ForeignKey("reglasJustificaciones.id"))
 
 class ReglaJustificacion(Base):
-    __tablename__ = "reglasJustificaciones"
+    __tablename__ = "reglasjustificaciones"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
 
 class ReglaRetardo(Base):
-    __tablename__ = "reglasRetardos"
+    __tablename__ = "reglasretardos"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
@@ -146,14 +146,14 @@ class ReglaRetardo(Base):
     minutosMax = Column(Integer, nullable=False)
 
 class DiaFestivo(Base):
-    __tablename__ = "diasFestivos"
+    __tablename__ = "diasfestivos"
 
     id = Column(Integer, primary_key=True, index=True)
     fecha = Column(DateTime, nullable=False)
     descripcion = Column(String(100), nullable=False)
 
 class RolUsuario(Base):
-    __tablename__ = "rolesUsuarios"
+    __tablename__ = "rolesusuarios"
 
     id = Column(Integer, primary_key=True, index=True)
     descripcion = Column(String(100), nullable=False)
