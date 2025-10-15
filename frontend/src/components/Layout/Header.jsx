@@ -1,29 +1,27 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   AppBar, 
   Toolbar, 
   Typography, 
+  Button, 
   IconButton,
   Box,
   Menu,
   MenuItem,
-  Divider,
-  ListItemIcon
+  Avatar,
+  Divider
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   Notifications as NotificationsIcon,
   AccountCircle,
   Settings as SettingsIcon,
-  ExitToApp as LogoutIcon,
-  Person as PersonIcon
+  ExitToApp as LogoutIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Header = ({ onToggleSidebar }) => {
   const { user, logout, isAuthenticated } = useAuth();
-  const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = React.useState(null);
 
   const handleMenu = (event) => {
@@ -34,26 +32,10 @@ const Header = ({ onToggleSidebar }) => {
     setAnchorEl(null);
   };
 
-  const handleProfile = () => {
-    navigate('/perfil');
-    handleClose();
-  };
-
-  const handleSettings = () => {
-    navigate('/configuracion/general');
-    handleClose();
-  };
-
   const handleLogout = () => {
     logout();
-    navigate('/login');
     handleClose();
   };
-
-  // Construir nombre completo
-  const nombreCompleto = user 
-    ? `${user.nombre || ''}`.trim()
-    : 'Usuario';
 
   return (
     <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
@@ -103,40 +85,32 @@ const Header = ({ onToggleSidebar }) => {
               open={Boolean(anchorEl)}
               onClose={handleClose}
             >
-              <Box sx={{ px: 2, py: 1.5, minWidth: 200 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  {nombreCompleto}
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="subtitle1">
+                  {user ? `${user.nombre}` : 'Usuario'}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {user?.rfc || ''}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {user?.puesto || ''}
+                <Typography variant="body2" color="textSecondary">
+                  {user ? user.rfc : ''}
                 </Typography>
               </Box>
-              
               <Divider />
-              
-              <MenuItem onClick={handleProfile}>
-                <ListItemIcon>
-                  <PersonIcon fontSize="small" />
-                </ListItemIcon>
+              <MenuItem onClick={handleClose}>
+                <IconButton size="small" sx={{ mr: 1 }}>
+                  <AccountCircle fontSize="small" />
+                </IconButton>
                 Mi Perfil
               </MenuItem>
-              
-              <MenuItem onClick={handleSettings}>
-                <ListItemIcon>
+              <MenuItem onClick={handleClose}>
+                <IconButton size="small" sx={{ mr: 1 }}>
                   <SettingsIcon fontSize="small" />
-                </ListItemIcon>
+                </IconButton>
                 Configuración
               </MenuItem>
-              
               <Divider />
-              
               <MenuItem onClick={handleLogout}>
-                <ListItemIcon>
+                <IconButton size="small" sx={{ mr: 1 }}>
                   <LogoutIcon fontSize="small" />
-                </ListItemIcon>
+                </IconButton>
                 Cerrar Sesión
               </MenuItem>
             </Menu>
