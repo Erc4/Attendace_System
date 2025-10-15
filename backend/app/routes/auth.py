@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import timedelta
 from app.database import get_db
 from app.schemas.schemas import Token, LoginRequest
 from app.services.auth_service import (
     authenticate_trabajador, 
     create_access_token, 
-    get_password_hash
+    get_password_hash,
+    get_current_trabajador
 )
 from app.models.models import Trabajador
 from app.config import settings
@@ -96,3 +97,38 @@ async def registrar_asistencia_huella(huella_base64: str, db: Session = Depends(
         "estatus": registro.estatus
     }
 
+@router.get("/me")
+async def get_current_user_info(
+    current_user: Trabajador = Depends(get_current_trabajador),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener información completa del usuario actual autenticado
+    """
+    # Cargar el trabajador con todas las relaciones
+    trabajador_completo = db.query(Trabajador).options(
+        joinedload(Trabajador.tipo_trabajador),
+        joinedload(Trabajador.departamento_rel),
+        joinedload(Trabajador.horario_rel),
+        joinedload(Trabajador.centro_trabajo_rel),
+        joinedload(Trabajador.grado_estudios_rel),
+        joinedload(Trabajador.rol_rel)
+    ).filter(Trabajador.id == current_user.id).first()
+    
+    if not trabajador_completo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+    
+    return {
+        "id": trabajador_completo.id,
+        "nombre": trabajador_completo.nombre,
+        "apellidoPaterno": trabajador_completo.apellidoPaterno,
+        "apellidoMaterno": trabajador_completo.apellidoMaterno,
+        "rfc": trabajador_completo.rfc,
+        "correo": trabajador_completo.correo,
+        "puesto": trabajador_completo.puesto,
+        "departamento": trabajador_completo.departamento_rel.descripcion if trabajador_completo.departamento_rel else None,
+        "rol": trabajador_completo.rol_rel.descripcion if trabajador_completo.rol_rel else None
+    }
