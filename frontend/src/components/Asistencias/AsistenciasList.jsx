@@ -370,7 +370,7 @@ const AsistenciasList = () => {
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
-                label="Buscar por nombre o RFC"
+                label="Buscar por nombre"
                 variant="outlined"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
