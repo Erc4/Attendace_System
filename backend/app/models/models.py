@@ -12,7 +12,7 @@ class Trabajador(Base):
     apellidoPaterno = Column(String(100), nullable=False)
     apellidoMaterno = Column(String(100), nullable=False)
     nombre = Column(String(100), nullable=False)
-    id_tipo = Column(Integer, ForeignKey("tipoTrabajador.id"))
+    id_tipo = Column(Integer, ForeignKey("tipotrabajador.id"))
     departamento = Column(Integer, ForeignKey("departamentos.id"))
     rfc = Column(String(13), nullable=False)
     curp = Column(String(18), nullable=False)
@@ -22,15 +22,15 @@ class Trabajador(Base):
     puesto = Column(String(100), nullable=False)
     id_horario = Column(Integer, ForeignKey("horarios.id"))
     estado = Column(Boolean, nullable=False)
-    id_centroTrabajo = Column(Integer, ForeignKey("centroTrabajo.id"))
-    id_gradoEstudios = Column(Integer, ForeignKey("gradosEstudio.id"))
+    id_centroTrabajo = Column(Integer, ForeignKey("centrotrabajo.id"))
+    id_gradoEstudios = Column(Integer, ForeignKey("gradosestudio.id"))
     titulo = Column(String(100), nullable=False)
     cedula = Column(String(100), nullable=False)
     escuelaEgreso = Column(String(100), nullable=False)
     turno = Column(String(100), nullable=False)
     correo = Column(String(100), nullable=False)
     huellaDigital = Column(BLOB, nullable=False)
-    id_rol = Column(Integer, ForeignKey("rolesUsuarios.id"))
+    id_rol = Column(Integer, ForeignKey("rolesusuarios.id"))
     hashed_password = Column(String(255), nullable=True)  # Campo para la contraseña hasheada
     
     # Definir las relaciones
@@ -129,7 +129,7 @@ class Justificacion(Base):
     # CORREGIDO: Usar id_trabajador consistentemente
     id_trabajador = Column(Integer, ForeignKey("trabajadores.id"))
     fecha = Column(DateTime, nullable=False)
-    id_descripcion = Column(Integer, ForeignKey("reglasJustificaciones.id"))
+    id_descripcion = Column(Integer, ForeignKey("reglasjustificaciones.id"))
 
 class ReglaJustificacion(Base):
     __tablename__ = "reglasjustificaciones"
