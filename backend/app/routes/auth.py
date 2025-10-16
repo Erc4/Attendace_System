@@ -132,3 +132,104 @@ async def get_current_user_info(
         "departamento": trabajador_completo.departamento_rel.descripcion if trabajador_completo.departamento_rel else None,
         "rol": trabajador_completo.rol_rel.descripcion if trabajador_completo.rol_rel else None
     }
+
+@router.put("/me")
+async def update_current_user_profile(
+    update_data: dict,
+    current_user: Trabajador = Depends(get_current_trabajador),
+    db: Session = Depends(get_db)
+):
+    """
+    Actualizar información del perfil del usuario actual
+    Solo permite actualizar campos específicos de información personal
+    """
+    # Campos permitidos para actualizar
+    allowed_fields = {
+        'nombre', 'apellidoPaterno', 'apellidoMaterno', 
+        'correo', 'titulo', 'cedula', 'escuelaEgreso'
+    }
+    
+    # Filtrar solo campos permitidos
+    filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
+    
+    if not filtered_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay campos válidos para actualizar"
+        )
+    
+    # Actualizar el trabajador
+    for key, value in filtered_data.items():
+        setattr(current_user, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(current_user)
+        
+        # Retornar datos actualizados
+        return {
+            "message": "Perfil actualizado correctamente",
+            "id": current_user.id,
+            "nombre": current_user.nombre,
+            "apellidoPaterno": current_user.apellidoPaterno,
+            "apellidoMaterno": current_user.apellidoMaterno,
+            "correo": current_user.correo,
+            "titulo": current_user.titulo,
+            "cedula": current_user.cedula,
+            "escuelaEgreso": current_user.escuelaEgreso
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al actualizar el perfil: {str(e)}"
+        )
+
+
+@router.put("/me/password")
+async def change_password(
+    password_data: dict,
+    current_user: Trabajador = Depends(get_current_trabajador),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambiar la contraseña del usuario actual
+    Requiere: current_password, new_password
+    """
+    from app.services.auth_service import verify_password, get_password_hash
+    
+    current_password = password_data.get('current_password')
+    new_password = password_data.get('new_password')
+    
+    if not current_password or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requieren current_password y new_password"
+        )
+    
+    # Verificar que la contraseña actual sea correcta
+    if not verify_password(current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual es incorrecta"
+        )
+    
+    # Validar longitud de nueva contraseña
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 6 caracteres"
+        )
+    
+    # Actualizar contraseña
+    current_user.hashed_password = get_password_hash(new_password)
+    
+    try:
+        db.commit()
+        return {"message": "Contraseña actualizada correctamente"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al cambiar la contraseña: {str(e)}"
+        )

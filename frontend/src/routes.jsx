@@ -38,6 +38,8 @@ import GestionDiasFestivos from './components/DiasFestivos/GestionDiasFestivos';
 
 //Configuración
 import ConfiguracionReglasRetardo from './components/Configuracion/ConfiguracionReglasRetardo';
+import Perfil from './components/Perfil/Perfil';
+
 // Componente para rutas protegidas
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -82,6 +84,18 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } 
       />
+
+      <Route 
+        path="/perfil" 
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Perfil />
+            </Layout>
+          </ProtectedRoute>
+        } 
+      />
+
       
       {/* Rutas de Asistencias */}
       <Route 
