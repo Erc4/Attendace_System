@@ -62,7 +62,7 @@ const ReporteRetardosFaltas = () => {
   const [error, setError] = useState(null);
   const [reporteData, setReporteData] = useState(null);
   const [departamentos, setDepartamentos] = useState([]);
-  const [trabajadores, setTrabajadores] = useState([]);
+  const [trabajadores, setTrabajadores] = useState([]); 
   
   // Estados para configuración del reporte
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
